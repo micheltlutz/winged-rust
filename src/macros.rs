@@ -1,0 +1,364 @@
+//! The [`html!`](crate::html) declarative macro.
+//!
+//! Rust's answer to Winged-Swift's `@HTMLBuilder` / `@HTMLFragmentBuilder` result builders
+//! (`Sources/WingedSwift/functions/HTMLFunctions.swift`). It is **sugar over the builder
+//! API, never a second code path** — every form here expands to the same `Element` and
+//! `Node` calls you would write by hand, so there is exactly one renderer to keep correct.
+
+use crate::core::{Element, Node};
+
+/// Builds a node tree from nested markup-like syntax.
+///
+/// # Syntax
+///
+/// | form | meaning |
+/// | --- | --- |
+/// | `div { … }` | an element with children |
+/// | `div(class = "card", id = "x") { … }` | attributes, then children |
+/// | `input(type = "email", required)` | a bare name is a boolean attribute |
+/// | `"text"` | escaped text |
+/// | `(expr)` | an escaped `Display` expression |
+/// | `raw(expr)` | unescaped markup |
+/// | `@if cond { … } @else { … }` | conditional, empty branch renders to nothing |
+/// | `@for pat in iter { … }` | repetition |
+///
+/// # Examples
+///
+/// ```
+/// use winged_rust::{html, prelude::*};
+///
+/// let page = html! {
+///     div(class = "card", id = "hero") {
+///         h1 { "Welcome" }
+///         p { "Fuel, tyres & chain." }
+///     }
+/// };
+///
+/// assert_eq!(
+///     page.render(),
+///     r#"<div class="card" id="hero"><h1>Welcome</h1><p>Fuel, tyres &amp; chain.</p></div>"#
+/// );
+/// ```
+///
+/// Conditionals and loops, matching `buildOptional` / `buildEither` / `buildArray`:
+///
+/// ```
+/// use winged_rust::{html, prelude::*};
+///
+/// let names = ["Ana", "Bruno"];
+/// let logged_in = false;
+///
+/// let list = html! {
+///     ul {
+///         @for name in names { li { (name) } }
+///         @if logged_in { li { "Sign out" } }
+///     }
+/// };
+///
+/// assert_eq!(list.render(), "<ul><li>Ana</li><li>Bruno</li></ul>");
+/// ```
+///
+/// The expansion is the builder API, so the two are interchangeable:
+///
+/// ```
+/// use winged_rust::{html, prelude::*};
+/// assert_eq!(
+///     html! { p(class = "lead") { "hi" } }.render(),
+///     Node::from(p().add_class("lead").child(Node::text("hi"))).render()
+/// );
+/// ```
+#[macro_export]
+macro_rules! html {
+    // A single root node.
+    ($($body:tt)*) => {{
+        let mut __nodes = $crate::macros::node_buffer();
+        $crate::html_nodes!(__nodes, $($body)*);
+        if __nodes.len() == 1 {
+            __nodes.pop().unwrap_or_else(|| $crate::Node::Fragment(::std::vec::Vec::new()))
+        } else {
+            $crate::Node::Fragment(__nodes)
+        }
+    }};
+}
+
+/// Accumulates sibling nodes into a `Vec`. Not part of the public API.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! html_nodes {
+    // Terminal.
+    ($out:ident,) => {};
+
+    // @if and @for hand off to a token muncher. A `$cond:expr` fragment cannot be
+    // used before a brace: the expression parser would read `show { … }` as a struct
+    // literal and macro_rules cannot backtrack once a fragment has been consumed.
+    ($out:ident, @if $($tail:tt)*) => { $crate::html_if!($out, [] $($tail)*); };
+    ($out:ident, @for $($tail:tt)*) => { $crate::html_for!($out, [] $($tail)*); };
+
+    // raw(expr) — unescaped markup.
+    ($out:ident, raw($value:expr) $($rest:tt)*) => {
+        $out.push($crate::Node::raw(::std::string::ToString::to_string(&$value)));
+        $crate::html_nodes!($out, $($rest)*);
+    };
+
+    // Element with attributes and children.
+    ($out:ident, $tag:ident ( $($attrs:tt)* ) { $($children:tt)* } $($rest:tt)*) => {
+        {
+            let __el = $crate::elements::$tag();
+            let __el = $crate::html_attrs!(__el, $($attrs)*);
+            let mut __kids = $crate::macros::node_buffer();
+            $crate::html_nodes!(__kids, $($children)*);
+            $out.push($crate::Node::Element(
+                $crate::macros::element_with_children(__el, __kids)));
+        }
+        $crate::html_nodes!($out, $($rest)*);
+    };
+
+    // Element with attributes only.
+    ($out:ident, $tag:ident ( $($attrs:tt)* ) $($rest:tt)*) => {
+        {
+            let __el = $crate::elements::$tag();
+            $out.push($crate::Node::Element($crate::html_attrs!(__el, $($attrs)*)));
+        }
+        $crate::html_nodes!($out, $($rest)*);
+    };
+
+    // Element with children only.
+    ($out:ident, $tag:ident { $($children:tt)* } $($rest:tt)*) => {
+        {
+            let mut __kids = $crate::macros::node_buffer();
+            $crate::html_nodes!(__kids, $($children)*);
+            $out.push($crate::Node::Element(
+                $crate::macros::element_with_children($crate::elements::$tag(), __kids)));
+        }
+        $crate::html_nodes!($out, $($rest)*);
+    };
+
+    // Interpolated expression, escaped.
+    ($out:ident, ($value:expr) $($rest:tt)*) => {
+        $out.push($crate::Node::text(::std::string::ToString::to_string(&$value)));
+        $crate::html_nodes!($out, $($rest)*);
+    };
+
+    // Literal text, escaped.
+    ($out:ident, $text:literal $($rest:tt)*) => {
+        $out.push($crate::Node::text($text));
+        $crate::html_nodes!($out, $($rest)*);
+    };
+
+    // A bare element with no attributes and no children.
+    ($out:ident, $tag:ident $($rest:tt)*) => {
+        $out.push($crate::Node::Element($crate::elements::$tag()));
+        $crate::html_nodes!($out, $($rest)*);
+    };
+}
+
+/// Applies an attribute list to an element. Not part of the public API.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! html_attrs {
+    ($el:expr,) => { $el };
+    ($el:expr) => { $el };
+
+    // "key" = value — a string key, for names that are Rust keywords such as `type`.
+    ($el:expr, $key:literal = $value:expr, $($rest:tt)*) => {
+        $crate::html_attrs!(
+            $el.attr($key, ::std::string::ToString::to_string(&$value)), $($rest)*)
+    };
+    ($el:expr, $key:literal = $value:expr) => {
+        $el.attr($key, ::std::string::ToString::to_string(&$value))
+    };
+
+    // key = value
+    ($el:expr, $key:ident = $value:expr, $($rest:tt)*) => {
+        $crate::html_attrs!(
+            $el.attr(stringify!($key), ::std::string::ToString::to_string(&$value)), $($rest)*)
+    };
+    ($el:expr, $key:ident = $value:expr) => {
+        $el.attr(stringify!($key), ::std::string::ToString::to_string(&$value))
+    };
+
+    // A bare name is a boolean attribute.
+    ($el:expr, $key:literal, $($rest:tt)*) => {
+        $crate::html_attrs!($el.bool_attr($key), $($rest)*)
+    };
+    ($el:expr, $key:literal) => {
+        $el.bool_attr($key)
+    };
+    ($el:expr, $key:ident, $($rest:tt)*) => {
+        $crate::html_attrs!($el.bool_attr(stringify!($key)), $($rest)*)
+    };
+    ($el:expr, $key:ident) => {
+        $el.bool_attr(stringify!($key))
+    };
+}
+
+/// An empty sibling buffer for the macro to push into.
+///
+/// A function rather than an inline `Vec::new()` so that `clippy::vec_init_then_push` does
+/// not fire inside every `html!` expansion in every downstream crate. The lint is about
+/// hand-written style; this code is generated.
+#[doc(hidden)]
+#[must_use]
+pub fn node_buffer() -> Vec<Node> {
+    Vec::new()
+}
+
+/// Attaches macro-collected children to an element.
+///
+/// When every child is text, it becomes the element's **content** rather than a list of
+/// child nodes. That is what the builder API produces for `p().text("x")`, and the two
+/// render differently once pretty printing is on: content stays on the element's line,
+/// while a child text node gets its own indented line. Collapsing here is what keeps the
+/// macro true sugar over the builder rather than a second, subtly different code path.
+#[doc(hidden)]
+#[must_use]
+pub fn element_with_children(element: Element, children: Vec<Node>) -> Element {
+    let all_text = !children.is_empty() && children.iter().all(|c| matches!(c, Node::Text(_)));
+
+    if all_text {
+        let mut content = String::new();
+        for child in children {
+            if let Node::Text(text) = child {
+                content.push_str(&text);
+            }
+        }
+        // The text was escaped when each node was built, so it goes in verbatim.
+        return element.raw_text(content);
+    }
+
+    element.children_from(children)
+}
+
+/// Token muncher for `@if`. Collects condition tokens until the body block. Not public.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! html_if {
+    ($out:ident, [$($cond:tt)+] { $($body:tt)* } @else { $($alt:tt)* } $($rest:tt)*) => {
+        if $($cond)+ { $crate::html_nodes!($out, $($body)*); }
+        else { $crate::html_nodes!($out, $($alt)*); }
+        $crate::html_nodes!($out, $($rest)*);
+    };
+    ($out:ident, [$($cond:tt)+] { $($body:tt)* } $($rest:tt)*) => {
+        if $($cond)+ { $crate::html_nodes!($out, $($body)*); }
+        $crate::html_nodes!($out, $($rest)*);
+    };
+    ($out:ident, [$($cond:tt)*] $next:tt $($rest:tt)*) => {
+        $crate::html_if!($out, [$($cond)* $next] $($rest)*);
+    };
+}
+
+/// Token muncher for `@for`. Collects `pat in iter` until the body block. Not public.
+#[doc(hidden)]
+#[macro_export]
+macro_rules! html_for {
+    ($out:ident, [$($head:tt)+] { $($body:tt)* } $($rest:tt)*) => {
+        for $($head)+ { $crate::html_nodes!($out, $($body)*); }
+        $crate::html_nodes!($out, $($rest)*);
+    };
+    ($out:ident, [$($head:tt)*] $next:tt $($rest:tt)*) => {
+        $crate::html_for!($out, [$($head)* $next] $($rest)*);
+    };
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::prelude::*;
+
+    #[test]
+    fn a_bare_element_renders_empty() {
+        assert_eq!(html! { div }.render(), "<div></div>");
+    }
+
+    #[test]
+    fn text_children_are_escaped() {
+        assert_eq!(html! { p { "a & b" } }.render(), "<p>a &amp; b</p>");
+    }
+
+    #[test]
+    fn raw_children_are_not_escaped() {
+        assert_eq!(html! { p { raw("<b>x</b>") } }.render(), "<p><b>x</b></p>");
+    }
+
+    #[test]
+    fn attributes_and_children_combine() {
+        assert_eq!(
+            html! { div(class = "card", id = "hero") { p { "hi" } } }.render(),
+            r#"<div class="card" id="hero"><p>hi</p></div>"#
+        );
+    }
+
+    #[test]
+    fn a_bare_attribute_name_is_a_boolean_attribute() {
+        assert_eq!(
+            html! { input("type" = "email", name = "email", required) }.render(),
+            r#"<input type="email" name="email" required>"#
+        );
+    }
+
+    #[test]
+    fn expressions_interpolate_escaped() {
+        let name = "Tom & Jerry";
+        assert_eq!(
+            html! { span { (name) } }.render(),
+            "<span>Tom &amp; Jerry</span>"
+        );
+    }
+
+    /// Matches `buildArray` in Winged-Swift's `HTMLBuilder`.
+    #[test]
+    fn for_loops_expand_to_siblings() {
+        let names = ["Ana", "Bruno"];
+        assert_eq!(
+            html! { ul { @for n in names { li { (n) } } } }.render(),
+            "<ul><li>Ana</li><li>Bruno</li></ul>"
+        );
+    }
+
+    /// Matches `buildOptional`: a false branch renders to nothing at all.
+    #[test]
+    fn a_false_condition_contributes_no_node() {
+        let show = false;
+        assert_eq!(
+            html! { div { @if show { p { "x" } } } }.render(),
+            "<div></div>"
+        );
+    }
+
+    /// Matches `buildEither`.
+    #[test]
+    fn if_else_picks_one_branch() {
+        let logged_in = true;
+        let markup = html! {
+            nav { @if logged_in { a { "Sign out" } } @else { a { "Sign in" } } }
+        };
+        assert_eq!(markup.render(), "<nav><a>Sign out</a></nav>");
+    }
+
+    #[test]
+    fn several_roots_become_a_fragment() {
+        assert_eq!(html! { p { "a" } p { "b" } }.render(), "<p>a</p><p>b</p>");
+    }
+
+    /// The macro is sugar: it must produce exactly what the builder produces.
+    #[test]
+    fn macro_output_equals_the_builder_output() {
+        let from_macro = html! { div(class = "card") { h1 { "T" } p { "B" } } };
+        let from_builder = Node::from(
+            div()
+                .add_class("card")
+                .child(h1().text("T"))
+                .child(p().text("B")),
+        );
+        assert_eq!(from_macro.render(), from_builder.render());
+        assert_eq!(from_macro.render_pretty(), from_builder.render_pretty());
+    }
+
+    #[test]
+    fn nesting_survives_pretty_printing() {
+        let markup = html! { div { section { p { "deep" } } } };
+        assert_eq!(
+            markup.render_pretty(),
+            "<div>\n  <section>\n    <p>deep</p>\n  </section>\n</div>"
+        );
+    }
+}
