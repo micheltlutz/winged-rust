@@ -34,6 +34,12 @@
 //! their configuration from a [`RenderOptions`] value rather than global state, so two
 //! threads can render the same tree differently at the same time.
 //!
+//! # Limits
+//!
+//! Rendering recurses once per nesting level, so 256 levels of nesting is the guaranteed
+//! depth. See [`Render`] and `SECURITY.md` — it is only reachable when tree depth can be
+//! influenced by untrusted input.
+//!
 //! # Parity
 //!
 //! The crate is verified against Winged-Swift's own golden fixtures — the same bytes, from

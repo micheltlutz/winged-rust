@@ -139,6 +139,18 @@ fixture in a pull-request diff is the signal that markup changed.
 Deliberate differences from the Swift API — and the reason for each — are listed in
 [`PORTING.md`](PORTING.md).
 
+## Known limitations
+
+**Rendering depth is bounded by the stack.** The renderer recurses once per nesting level,
+so 256 levels is the guaranteed depth — deeper than browsers themselves render. Around
+2,000 levels aborts the process, and a stack overflow is an abort rather than a catchable
+panic.
+
+This is only reachable if nesting depth can be influenced by untrusted input. If it can,
+bound the depth before building the tree or render on a thread with a larger stack. See
+[`SECURITY.md`](SECURITY.md#known-limitation-rendering-depth-is-bounded-by-the-stack) and
+[#33](https://github.com/micheltlutz/winged-rust/issues/33).
+
 ## Development
 
 ```bash

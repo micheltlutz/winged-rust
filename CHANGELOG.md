@@ -63,9 +63,11 @@ The short version:
 
 ### Known limitations
 
-- The renderer is recursive, so rendering a tree more than roughly 2,000 levels deep
-  overflows the stack and aborts. 256 levels is guaranteed and covered by a test — deeper
-  than browsers themselves handle. Tracked in
+- **Rendering depth is bounded by the stack.** The renderer recurses once per nesting
+  level. 256 levels is guaranteed and covered by a test — deeper than browsers themselves
+  render; around 2,000 levels aborts the process, and a stack overflow is an abort rather
+  than a catchable panic. Only reachable when nesting depth can be influenced by untrusted
+  input; documented in `SECURITY.md`, the `README`, and on the `Render` trait. Tracked in
   [#33](https://github.com/micheltlutz/winged-rust/issues/33).
 
 ### Fixed relative to Winged-Swift
