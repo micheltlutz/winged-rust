@@ -31,12 +31,25 @@ wasm-bindgen = { version = "0.2", optional = true }
 rayon = { version = "1.10", optional = true }
 
 [dev-dependencies]
-criterion = "0.5"
 wasm-bindgen-test = "0.3"
+
+# criterion pulls rayon, which refuses to compile for wasm32 ("Rayon cannot be used when
+# targeting wasi32"). Keeping it off the wasm target is what lets `wasm-pack test` build.
+[target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
+criterion = "0.5"
 
 [[bench]]
 name = "render"
 harness = false
+
+# Both examples write to disk, so they need the `ssg` feature. Without this,
+# `cargo test --no-default-features` tries to build them and fails on the missing module.
+[[example]]
+name = "static_site"
+required-features = ["ssg"]
+
+[[example]]
+name = "marketing_page"
 
 [package.metadata.docs.rs]
 all-features = true

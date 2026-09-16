@@ -61,6 +61,25 @@ jobs:
       - run: cargo build --features wasm --target wasm32-unknown-unknown
       - run: wasm-pack test --node -- --features wasm
 
+  npm:
+    name: NPM package
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - uses: Swatinem/rust-cache@v2
+      - uses: jetli/wasm-pack-action@v0.4.0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      # Builds all three targets and fails if the gzipped size exceeds the budget.
+      - run: ./scripts/build-wasm.sh
+      # tsc over the generated typings, then installs a packed tarball into a throwaway
+      # project and renders the golden page through it.
+      - run: ./scripts/verify-npm.sh
+
   verify:
     name: Verify (build, test, lint, catalog, smoke)
     runs-on: ubuntu-latest

@@ -25,3 +25,12 @@ lcov.info
 # macOS
 .DS_Store
 dist/
+
+# wasm-pack output — built by scripts/build-wasm.sh, never committed.
+# npm/package.json, npm/README.md, npm/LICENSE, npm/smoke.* and npm/tsconfig.json are ours
+# and are tracked; the three build directories are not.
+/npm/web/
+/npm/node/
+/npm/bundler/
+/npm/*.tgz
+/examples/node/dist/
