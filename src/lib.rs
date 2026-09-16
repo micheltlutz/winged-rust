@@ -45,8 +45,13 @@
 pub mod core;
 pub mod document;
 pub mod elements;
+pub mod feed;
 pub mod layout;
+#[macro_use]
+pub mod macros;
 pub mod prelude;
+pub mod seo;
+pub mod sitemap;
 
 pub use crate::core::{Attribute, Element, Node, Render, RenderOptions};
 pub use crate::document::Document;

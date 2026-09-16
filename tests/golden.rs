@@ -36,13 +36,17 @@ fn assert_matches_fixture(name: &str, actual: &str) {
     let expected = std::fs::read_to_string(&path)
         .unwrap_or_else(|e| panic!("cannot read fixture {}: {e}", path.display()));
 
-    if expected != actual {
-        panic!("{}", render_diff(name, &expected, actual));
-    }
+    assert!(
+        expected == actual,
+        "{}",
+        render_diff(name, &expected, actual)
+    );
 }
 
 /// A line-oriented diff. `assertion failed` on a 2.7 KB string tells you nothing.
 fn render_diff(name: &str, expected: &str, actual: &str) -> String {
+    use std::fmt::Write as _;
+
     let mut report = format!("fixture {name} does not match\n");
     let expected_lines: Vec<&str> = expected.lines().collect();
     let actual_lines: Vec<&str> = actual.lines().collect();
@@ -51,12 +55,13 @@ fn render_diff(name: &str, expected: &str, actual: &str) -> String {
         match (expected_lines.get(i), actual_lines.get(i)) {
             (Some(e), Some(a)) if e == a => {}
             (e, a) => {
-                report.push_str(&format!(
-                    "line {}:\n  expected: {:?}\n  actual:   {:?}\n",
+                let _ = writeln!(
+                    report,
+                    "line {}:\n  expected: {:?}\n  actual:   {:?}",
                     i + 1,
                     e.unwrap_or(&"<missing>"),
                     a.unwrap_or(&"<missing>")
-                ));
+                );
             }
         }
     }
@@ -67,116 +72,123 @@ fn render_diff(name: &str, expected: &str, actual: &str) -> String {
 /// The marketing page from `Winged-Swift/Tests/WingedSwiftTests/GoldenFileTests.swift`,
 /// rebuilt with the Rust builder API.
 fn marketing_page() -> Document {
+    Document::new(Some("pt-BR"))
+        .head_children(marketing_head())
+        .body_children(marketing_body())
+}
+
+/// The seventeen head nodes: charset, viewport, the common SEO block, Open Graph,
+/// Twitter Cards, the title and the stylesheet.
+fn marketing_head() -> Vec<Element> {
     let description = "Motorcycle maintenance companion";
     let og_image = "https://ridekeeper.example/og.jpg";
 
-    Document::new(Some("pt-BR"))
-        .head_children([
-            meta().attr("charset", "UTF-8"),
-            meta()
-                .attr("name", "viewport")
-                .attr("content", "width=device-width, initial-scale=1.0"),
-            meta()
-                .attr("name", "description")
-                .attr("content", description),
-            meta()
-                .attr("name", "robots")
-                .attr("content", "index, follow"),
-            meta()
-                .attr("name", "keywords")
-                .attr("content", "swift, motorcycle"),
-            meta().attr("name", "author").attr("content", "Michel Lutz"),
-            meta()
-                .attr("property", "og:title")
-                .attr("content", "RideKeeper"),
-            meta()
-                .attr("property", "og:description")
-                .attr("content", description),
-            meta()
-                .attr("property", "og:image")
-                .attr("content", og_image),
-            meta()
-                .attr("property", "og:url")
-                .attr("content", "https://ridekeeper.example"),
-            meta()
-                .attr("property", "og:type")
-                .attr("content", "website"),
-            meta()
-                .attr("name", "twitter:card")
-                .attr("content", "summary_large_image"),
-            meta()
-                .attr("name", "twitter:title")
-                .attr("content", "RideKeeper"),
-            meta()
-                .attr("name", "twitter:description")
-                .attr("content", description),
-            meta()
-                .attr("name", "twitter:image")
-                .attr("content", og_image),
-            meta()
-                .attr("name", "twitter:site")
-                .attr("content", "@micheltlutz"),
-            title().text("RideKeeper — track every service"),
-            stylesheet("/css/style.css"),
-        ])
-        .body_children([
-            header().child(
-                nav()
-                    .child(link_to("/").add_class("logo").text("RideKeeper"))
-                    .child(
-                        ul().child(li().child(link_to("/").text("Home")))
-                            .child(li().child(link_to("/pricing").text("Pricing & plans"))),
-                    ),
-            ),
-            main()
+    vec![
+        meta().attr("charset", "UTF-8"),
+        meta()
+            .attr("name", "viewport")
+            .attr("content", "width=device-width, initial-scale=1.0"),
+        meta()
+            .attr("name", "description")
+            .attr("content", description),
+        meta()
+            .attr("name", "robots")
+            .attr("content", "index, follow"),
+        meta()
+            .attr("name", "keywords")
+            .attr("content", "swift, motorcycle"),
+        meta().attr("name", "author").attr("content", "Michel Lutz"),
+        meta()
+            .attr("property", "og:title")
+            .attr("content", "RideKeeper"),
+        meta()
+            .attr("property", "og:description")
+            .attr("content", description),
+        meta()
+            .attr("property", "og:image")
+            .attr("content", og_image),
+        meta()
+            .attr("property", "og:url")
+            .attr("content", "https://ridekeeper.example"),
+        meta()
+            .attr("property", "og:type")
+            .attr("content", "website"),
+        meta()
+            .attr("name", "twitter:card")
+            .attr("content", "summary_large_image"),
+        meta()
+            .attr("name", "twitter:title")
+            .attr("content", "RideKeeper"),
+        meta()
+            .attr("name", "twitter:description")
+            .attr("content", description),
+        meta()
+            .attr("name", "twitter:image")
+            .attr("content", og_image),
+        meta()
+            .attr("name", "twitter:site")
+            .attr("content", "@micheltlutz"),
+        title().text("RideKeeper — track every service"),
+        stylesheet("/css/style.css"),
+    ]
+}
+
+/// The page body: header, main and footer.
+fn marketing_body() -> Vec<Element> {
+    vec![
+        header().child(
+            nav()
+                .child(link_to("/").add_class("logo").text("RideKeeper"))
                 .child(
-                    section()
-                        .set_id("hero")
-                        .child(h1().text("Track every service"))
-                        .child(p().text("Fuel, tyres & chain — all in one place."))
-                        .child(
-                            link_to("https://apps.example/app")
-                                .add_class("button")
-                                .text("Download"),
-                        ),
-                )
-                .child(
-                    table()
-                        .child(caption().text("Plans"))
-                        .child(
-                            thead().child(tr().child(th().text("Plan")).child(th().text("Price"))),
-                        )
-                        .child(
-                            tbody()
-                                .child(tr().child(td().text("Free")).child(td().text("R$ 0")))
-                                .child(
-                                    tr().child(td().text("Pro")).child(td().text("R$ 9,90/mês")),
-                                ),
-                        ),
-                )
-                .child(
-                    details()
-                        .bool_attr("open")
-                        .child(summary().text("Is my data private?"))
-                        .child(p().text("Yes — everything syncs through your own iCloud account.")),
-                )
-                .child(
-                    form().attr("action", "/subscribe").child(
-                        fieldset()
-                            .child(legend().text("Newsletter"))
-                            .child(label_for("email").text("E-mail"))
-                            .child(input_named("email", "email").bool_attr("required"))
-                            .child(button_typed("submit").text("Subscribe")),
-                    ),
-                )
-                .child(pre().child(code().text("let page = html { }")))
-                .child(
-                    figure()
-                        .child(image("/img/app.png", "App screenshot"))
-                        .child(figcaption().text("The garage screen")),
+                    ul().child(li().child(link_to("/").text("Home")))
+                        .child(li().child(link_to("/pricing").text("Pricing & plans"))),
                 ),
-            footer().child(p().text("© 2026 RideKeeper — built with Swift & WingedSwift")),
-        ])
+        ),
+        main()
+            .child(
+                section()
+                    .set_id("hero")
+                    .child(h1().text("Track every service"))
+                    .child(p().text("Fuel, tyres & chain — all in one place."))
+                    .child(
+                        link_to("https://apps.example/app")
+                            .add_class("button")
+                            .text("Download"),
+                    ),
+            )
+            .child(
+                table()
+                    .child(caption().text("Plans"))
+                    .child(thead().child(tr().child(th().text("Plan")).child(th().text("Price"))))
+                    .child(
+                        tbody()
+                            .child(tr().child(td().text("Free")).child(td().text("R$ 0")))
+                            .child(tr().child(td().text("Pro")).child(td().text("R$ 9,90/mês"))),
+                    ),
+            )
+            .child(
+                details()
+                    .bool_attr("open")
+                    .child(summary().text("Is my data private?"))
+                    .child(p().text("Yes — everything syncs through your own iCloud account.")),
+            )
+            .child(
+                form().attr("action", "/subscribe").child(
+                    fieldset()
+                        .child(legend().text("Newsletter"))
+                        .child(label_for("email").text("E-mail"))
+                        .child(input_named("email", "email").bool_attr("required"))
+                        .child(button_typed("submit").text("Subscribe")),
+                ),
+            )
+            .child(pre().child(code().text("let page = html { }")))
+            .child(
+                figure()
+                    .child(image("/img/app.png", "App screenshot"))
+                    .child(figcaption().text("The garage screen")),
+            ),
+        footer().child(p().text("© 2026 RideKeeper — built with Swift & WingedSwift")),
+    ]
 }
 
 #[test]
@@ -206,4 +218,40 @@ fn the_two_render_modes_agree_on_content() {
     // `<pre>` content is the one place where the two legitimately differ, and this page's
     // `<pre>` has no internal newlines, so the comparison is exact here.
     assert_eq!(squashed, compact);
+}
+
+/// The sitemap from `Winged-Swift/Tests/WingedSwiftTests/GoldenFileTests.swift`.
+#[test]
+fn sitemap_matches_the_fixture() {
+    use winged_rust::sitemap::{SitemapGenerator, SitemapUrl};
+
+    let xml = SitemapGenerator::generate(&[
+        SitemapUrl::new("https://ridekeeper.example/")
+            .changefreq("weekly")
+            .priority(1.0),
+        SitemapUrl::new("https://ridekeeper.example/pricing?plan=pro&billing=year")
+            .lastmod("2026-08-11")
+            .changefreq("monthly")
+            .priority(0.7),
+    ]);
+
+    assert_matches_fixture("sitemap.xml", &xml);
+}
+
+/// The feed from `Winged-Swift/Tests/WingedSwiftTests/GoldenFileTests.swift`.
+#[test]
+fn feed_matches_the_fixture() {
+    use winged_rust::feed::{RssGenerator, RssItem};
+
+    let xml = RssGenerator::new("RideKeeper", "https://ridekeeper.example", "Release notes")
+        .language("pt-BR")
+        .generate(&[RssItem::new(
+            "1.2 — tyres & chain",
+            "https://ridekeeper.example/blog/1-2",
+            "Tyre pressure log <and> chain reminders",
+            "Tue, 11 Aug 2026 10:00:00 +0000",
+        )
+        .categories(["release"])]);
+
+    assert_matches_fixture("feed.xml", &xml);
 }
