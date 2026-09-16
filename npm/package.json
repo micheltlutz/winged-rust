@@ -1,0 +1,51 @@
+{
+  "name": "winged-rust",
+  "version": "0.1.0",
+  "description": "Fast, type-safe HTML generation in WebAssembly. A port of Winged-Swift.",
+  "license": "MIT",
+  "author": "Michel Anderson Lutz Teixeira <michel@micheltlutz.me>",
+  "homepage": "https://github.com/micheltlutz/winged-rust",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/micheltlutz/winged-rust.git"
+  },
+  "bugs": {
+    "url": "https://github.com/micheltlutz/winged-rust/issues"
+  },
+  "keywords": [
+    "html",
+    "wasm",
+    "webassembly",
+    "ssg",
+    "templating",
+    "rust"
+  ],
+  "type": "module",
+  "sideEffects": false,
+  "main": "./node/winged_rust.js",
+  "module": "./bundler/winged_rust.js",
+  "types": "./bundler/winged_rust.d.ts",
+  "exports": {
+    ".": {
+      "types": "./bundler/winged_rust.d.ts",
+      "node": "./node/winged_rust.js",
+      "browser": "./web/winged_rust.js",
+      "default": "./bundler/winged_rust.js"
+    },
+    "./web": {
+      "types": "./web/winged_rust.d.ts",
+      "default": "./web/winged_rust.js"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "node",
+    "web",
+    "bundler",
+    "README.md",
+    "LICENSE"
+  ],
+  "engines": {
+    "node": ">=18"
+  }
+}
