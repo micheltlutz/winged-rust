@@ -1,0 +1,26 @@
+# Rust
+/target/
+**/*.rs.bk
+*.pdb
+
+# wasm-pack
+/pkg/
+/pkg-web/
+/pkg-node/
+/pkg-bundler/
+/wasm-pack.log
+
+# Node
+node_modules/
+npm/*.tgz
+
+# Coverage
+*.profraw
+*.profdata
+lcov.info
+
+# Generated docs — published to Pages, never committed
+/doc/
+
+# macOS
+.DS_Store
