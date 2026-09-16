@@ -5,8 +5,9 @@
 //! so they are generated from one table here. The public surface is the same; the source is
 //! roughly 200 lines instead of 93 files.
 //!
-//! Two tags are renamed back to their HTML spelling: Winged-Swift calls them `MainTag` and
-//! `VarTag` because `main` and `var` are Swift keywords. Neither is a Rust keyword.
+//! One tag is renamed back to its HTML spelling: Winged-Swift calls it `VarTag` because
+//! `var` is a Swift keyword, which Rust's `var` is not. `<main>` keeps a suffix — see
+//! [`main_tag`] for why.
 
 use crate::core::Element;
 
@@ -138,8 +139,13 @@ define_elements! {
     head => "head",
     /// Introductory content: `<header>`.
     header => "header",
-    /// The dominant content of the body: `<main>`. Winged-Swift calls this `MainTag`.
-    main => "main",
+    /// The dominant content of the body: `<main>`.
+    ///
+    /// Named `main_tag` rather than `main` because a binary crate's own `fn main` shadows a
+    /// glob-imported `main()`, so `main().child(…)` fails to compile in exactly the place
+    /// people write it first. Winged-Swift calls it `MainTag` for the analogous reason —
+    /// `main` is a Swift keyword.
+    main_tag => "main",
     /// Navigation links: `<nav>`.
     nav => "nav",
     /// Fallback for disabled scripting: `<noscript>`.
@@ -357,10 +363,10 @@ mod tests {
         assert_eq!(before, tags.len(), "duplicate tag in ALL_TAGS");
     }
 
-    /// Winged-Swift renames `main` and `var` to dodge Swift keywords; Rust does not need to.
+    /// `var` needs no suffix in Rust; `<main>` does, because `fn main` shadows it.
     #[test]
-    fn main_and_var_keep_their_html_spelling() {
-        assert_eq!(main().render(), "<main></main>");
+    fn the_renamed_tags_still_emit_their_html_names() {
+        assert_eq!(main_tag().render(), "<main></main>");
         assert_eq!(var().render(), "<var></var>");
     }
 

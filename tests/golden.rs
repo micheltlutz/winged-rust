@@ -144,7 +144,7 @@ fn marketing_body() -> Vec<Element> {
                         .child(li().child(link_to("/pricing").text("Pricing & plans"))),
                 ),
         ),
-        main()
+        main_tag()
             .child(
                 section()
                     .set_id("hero")

@@ -26,7 +26,7 @@ use crate::elements::div;
 ///     fn render(&self, content: Node) -> Node {
 ///         body()
 ///             .child(header().child(h1().text(&self.site_title)))
-///             .child(main().child(content))
+///             .child(main_tag().child(content))
 ///             .child(footer().child(p().text("© 2026")))
 ///             .into()
 ///     }
@@ -52,7 +52,7 @@ pub trait Layout {
 mod tests {
     use super::*;
     use crate::core::Render;
-    use crate::elements::{body, h1, main, p};
+    use crate::elements::{body, h1, main_tag, p};
 
     struct Minimal;
 
@@ -60,7 +60,7 @@ mod tests {
         fn render(&self, content: Node) -> Node {
             body()
                 .child(h1().text("Site"))
-                .child(main().child(content))
+                .child(main_tag().child(content))
                 .into()
         }
     }

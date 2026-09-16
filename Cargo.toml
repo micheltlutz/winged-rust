@@ -31,7 +31,12 @@ wasm-bindgen = { version = "0.2", optional = true }
 rayon = { version = "1.10", optional = true }
 
 [dev-dependencies]
+criterion = "0.5"
 wasm-bindgen-test = "0.3"
+
+[[bench]]
+name = "render"
+harness = false
 
 [package.metadata.docs.rs]
 all-features = true

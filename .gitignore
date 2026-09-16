@@ -24,3 +24,4 @@ lcov.info
 
 # macOS
 .DS_Store
+dist/

@@ -52,7 +52,7 @@ instead. `scripts/verify.sh` fails when this file is out of date.
 | `footer()` | `<footer>` | — | — |
 | `head()` | `<head>` | — | — |
 | `header()` | `<header>` | — | — |
-| `main()` | `<main>` | — | — |
+| `main_tag()` | `<main>` | — | — |
 | `nav()` | `<nav>` | — | — |
 | `noscript()` | `<noscript>` | — | — |
 | `p()` | `<p>` | — | — |
