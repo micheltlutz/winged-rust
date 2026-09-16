@@ -42,6 +42,7 @@
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 
+pub mod accessibility;
 pub mod core;
 pub mod document;
 pub mod elements;
@@ -52,6 +53,12 @@ pub mod macros;
 pub mod prelude;
 pub mod seo;
 pub mod sitemap;
+#[cfg(all(feature = "ssg", not(target_arch = "wasm32")))]
+#[cfg_attr(docsrs, doc(cfg(feature = "ssg")))]
+pub mod ssg;
+#[cfg(feature = "wasm")]
+#[cfg_attr(docsrs, doc(cfg(feature = "wasm")))]
+pub mod wasm;
 
 pub use crate::core::{Attribute, Element, Node, Render, RenderOptions};
 pub use crate::document::Document;
