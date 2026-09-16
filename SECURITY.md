@@ -32,6 +32,31 @@ These are vulnerabilities:
 - `StaticSiteGenerator` writing outside its output directory, or `clean()` deleting outside
   it.
 
+### Known limitation: rendering depth is bounded by the stack
+
+The renderer recurses once per nesting level, so a sufficiently deep tree exhausts the
+stack. A stack overflow is a process **abort**, not a catchable panic — `catch_unwind` will
+not save you.
+
+**Guaranteed depth: 256 levels**, covered by a test. That is already deeper than browsers
+themselves render — Chrome and Firefox both flatten nesting beyond roughly 512 elements. In
+practice around 2,000 levels aborts on a 2 MiB thread stack; more is fine on a main
+thread's 8 MiB.
+
+This matters **only if nesting depth can be influenced by untrusted input** — a
+user-supplied document tree, a recursive template, a converter fed arbitrary markup. If
+that describes your use:
+
+- Bound the depth yourself before building the tree, or
+- Render on a thread with a large explicit stack (`std::thread::Builder::stack_size`), or
+- Do not accept untrusted structure.
+
+If your tree shape is fixed by your own code — the usual case for a static site generator —
+this cannot be triggered.
+
+Tracked in [#33](https://github.com/micheltlutz/winged-rust/issues/33). Winged-Swift has the
+same shape and the same exposure; this is inherited, not introduced.
+
 These are **not** vulnerabilities, because they are documented behaviour:
 
 - `raw_text()` and `Node::Raw` not escaping their input. That is their entire purpose; they
@@ -40,6 +65,8 @@ These are **not** vulnerabilities, because they are documented behaviour:
 - `Attribute::raw` not escaping. It exists for library-controlled keys.
 - The library not validating URLs. `link_to("javascript:alert(1)")` renders what you asked
   for. URL policy is on the roadmap, not in the current guarantee.
+- Rendering a tree deeper than the documented 256 levels. See the limitation above — it is
+  a known bound, not an undisclosed one.
 
 ## For users
 

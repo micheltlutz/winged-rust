@@ -84,6 +84,17 @@ impl RenderOptions {
 /// Anything that can be written as HTML.
 ///
 /// Implement [`write_into`](Render::write_into); the rest comes free.
+///
+/// # Depth limit
+///
+/// The provided implementations recurse once per nesting level, so **256 levels is the
+/// guaranteed depth** — deeper than browsers themselves render. Around 2,000 levels
+/// exhausts a 2 MiB stack and aborts the process; a stack overflow is not a catchable
+/// panic.
+///
+/// This is only reachable when nesting depth can be influenced by untrusted input. If it
+/// can, bound the depth before building the tree, or render on a thread created with an
+/// explicit [`stack_size`](std::thread::Builder::stack_size). See `SECURITY.md`.
 pub trait Render {
     /// Writes this node and its subtree into an existing buffer.
     ///
