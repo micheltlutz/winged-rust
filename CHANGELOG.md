@@ -31,6 +31,16 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   content is neutralised so a comment cannot close early.
 - **Golden-file tests** reproducing all four Winged-Swift fixtures byte for byte, with
   `WINGED_UPDATE_FIXTURES=1` to regenerate.
+- **NPM package** — `web`, `nodejs` and `bundler` builds, 20 KB gzipped, with TypeScript
+  typings. `npm/smoke.mjs` renders the golden marketing page through WebAssembly and diffs
+  it against the same fixture the Rust tests use, so native and WASM output cannot drift
+  apart unnoticed.
+- **Browser and Node examples**, both runnable with no bundler.
+- **`scripts/build-wasm.sh`** — all three targets, with a gzipped size budget enforced in
+  CI.
+- **`scripts/verify-npm.sh`** — `tsc --noEmit` over the generated typings, then installs a
+  packed tarball into a throwaway project rather than linking the workspace, which is what
+  catches a wrong `files` allowlist or a broken `exports` map.
 - **`scripts/verify.sh`** — one command that is a superset of CI.
 - **`scripts/generate-tag-catalog.sh --check`** — documentation drift fails the build.
 
@@ -50,6 +60,13 @@ The short version:
 - Writes are atomic.
 - The process-wide `HTMLTag.xhtmlSelfClosing` switch is not ported; pass
   `RenderOptions::with_xhtml_self_closing` instead.
+
+### Known limitations
+
+- The renderer is recursive, so rendering a tree more than roughly 2,000 levels deep
+  overflows the stack and aborts. 256 levels is guaranteed and covered by a test — deeper
+  than browsers themselves handle. Tracked in
+  [#33](https://github.com/micheltlutz/winged-rust/issues/33).
 
 ### Fixed relative to Winged-Swift
 
