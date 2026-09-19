@@ -7,6 +7,28 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Fixed
+
+- **Rendering no longer recurses**, so nesting depth is no longer bounded by the stack.
+  The writer walks an explicit work stack, and `Element` tears its subtree down the same
+  way. A 100,000-level tree renders in both modes and is freed without aborting; output is
+  byte-identical to the recursive writer for every test and all four golden fixtures.
+  A stack overflow is an abort rather than a catchable panic, so this was a
+  denial-of-service vector wherever nesting depth could be influenced by untrusted input.
+  ([#33](https://github.com/micheltlutz/winged-rust/issues/33))
+- `Render for Element` no longer clones the whole subtree on every render. It built a
+  `Node::Element(self.clone())` first, which deep-copied the tree — and `Clone` is itself
+  recursive, so a deep tree aborted there before the writer ever saw it.
+- `RenderOptions::write_indent` returns immediately for an empty indent instead of looping
+  once per level to append nothing. That loop is quadratic in depth: it cost 135 seconds on
+  a 100,000-level tree, against 0.08 with the early return.
+
+### Changed
+
+- `Element` implements `Drop`. Its fields are private, so no partial move was possible on
+  it; a bare `Node::Fragment` chain with no element in it is still freed recursively,
+  because giving `Node` a `Drop` would forbid `match node { Node::Element(e) => e }`.
+
 ## [1.0.0] - 2026-09-18
 
 ### Added

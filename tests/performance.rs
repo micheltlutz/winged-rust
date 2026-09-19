@@ -49,22 +49,77 @@ fn rendering_is_stable_across_repeated_calls() {
     }
 }
 
-/// The renderer is recursive, so nesting depth is bounded by the stack.
+/// Depth is no longer bounded by the stack.
 ///
-/// 256 is the depth this guarantees, chosen because it is already deeper than browsers
-/// themselves handle — Chrome and Firefox both flatten nesting beyond roughly 512 elements,
-/// so markup this deep does not render as written in a browser either.
+/// The writer walks an explicit work stack instead of recursing, and `Element` tears its
+/// subtree down the same way, so nesting costs heap — bounded by a tree that is already in
+/// memory — rather than stack, which aborts the process when it runs out.
 ///
-/// Deeper trees work in practice (1,000 levels renders fine on a main thread's 8 MiB
-/// stack) but not on the 2 MiB stack the test harness gives a spawned thread, which is why
-/// the guaranteed figure is conservative. Making the renderer iterative is tracked
-/// separately.
-#[test]
-fn nesting_to_the_documented_depth_renders() {
+/// 100,000 levels is far past anything a browser renders: Chrome and Firefox both flatten
+/// nesting beyond roughly 512 elements. The figure is here to prove the ceiling is gone,
+/// not to suggest markup like this is reasonable.
+const VERY_DEEP: usize = 100_000;
+
+fn deep_tree(depth: usize) -> Element {
     let mut node = p().text("bottom");
-    for _ in 0..256 {
+    for _ in 0..depth {
         node = div().child(node);
     }
+    node
+}
+
+#[test]
+fn very_deep_nesting_renders_compact() {
+    assert_eq!(
+        deep_tree(VERY_DEEP).render().matches("<div>").count(),
+        VERY_DEEP
+    );
+}
+
+/// Pretty mode, with the indent turned off.
+///
+/// Indentation makes pretty output quadratic in depth — every one of the 200,001 lines
+/// carries one indent string per level above it, which at this depth is some 20 GB of
+/// whitespace and nothing to do with the stack. An empty indent walks exactly the same
+/// arms of the writer (newlines, the empty-child rollback, the deferred close tag) in
+/// linear output.
+#[test]
+fn very_deep_nesting_renders_pretty() {
+    let options = RenderOptions::pretty().with_indent("");
+    let rendered = deep_tree(VERY_DEEP).render_with(&options);
+
+    // One line to open each `<div>`, one to close it, and one for the `<p>` at the bottom.
+    assert_eq!(rendered.lines().count(), VERY_DEEP * 2 + 1);
+}
+
+/// Freeing the tree used to recurse too, so a tree deep enough to render could still abort
+/// on the way out of scope.
+#[test]
+fn dropping_a_very_deep_tree_does_not_abort() {
+    drop(deep_tree(VERY_DEEP));
+}
+
+/// Fragments nest through a different arm of the writer than elements do, and through a
+/// different arm of `Element`'s teardown.
+#[test]
+fn very_deep_fragments_render_and_drop() {
+    let mut node = Node::from(p().text("bottom"));
+    for _ in 0..VERY_DEEP {
+        node = Node::fragment([node]);
+    }
+
+    // Wrapped in an element on purpose: a bare `Node` chain is still freed recursively,
+    // because giving `Node` its own `Drop` would forbid `match node { Node::Element(e) =>
+    // e }` — a partial move this crate's own `static_site` example performs.
+    let root = div().child(node);
+    assert!(root.render().ends_with("<p>bottom</p></div>"));
+    drop(root);
+}
+
+/// The guaranteed depth this crate documents, kept as the cheap regression guard.
+#[test]
+fn nesting_to_the_documented_depth_renders() {
+    let node = deep_tree(256);
     assert!(node.render().len() > 256);
     assert!(node.render_pretty().lines().count() > 256);
 }
