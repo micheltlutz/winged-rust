@@ -140,7 +140,7 @@ fn format_priority(priority: f64) -> String {
 mod tests {
     use super::*;
 
-    /// Ports `SitemapGeneratorTests.testGenerate`.
+    /// Ports `SitemapGeneratorTests.testGenerateProducesValidURLSet`.
     #[test]
     fn a_sitemap_has_an_xml_declaration_and_a_urlset() {
         let xml = SitemapGenerator::generate(&[SitemapUrl::new("https://example.com/")]);
@@ -148,14 +148,14 @@ mod tests {
         assert!(xml.ends_with("</urlset>"));
     }
 
-    /// Ports `SitemapGeneratorTests.testEscapesAmpersand`.
+    /// Ports `SitemapGeneratorTests.testGenerateEscapesAmpersandsInURLs`.
     #[test]
     fn a_loc_containing_an_ampersand_is_escaped() {
         let xml = SitemapGenerator::generate(&[SitemapUrl::new("https://e.com/a?x=1&y=2")]);
         assert!(xml.contains("<loc>https://e.com/a?x=1&amp;y=2</loc>"));
     }
 
-    /// Ports `SitemapGeneratorTests.testPriorityFormat`. This is the subtle one: Swift
+    /// Ports `SitemapGeneratorTests.testPriorityIsRenderedWithOneDecimal`. This is the subtle one: Swift
     /// prints `1.0`, Rust's default `{}` prints `1`.
     #[test]
     fn whole_priorities_keep_one_decimal_place() {
@@ -165,7 +165,7 @@ mod tests {
         assert_eq!(format_priority(0.25), "0.25");
     }
 
-    /// Ports `SitemapGeneratorTests.testOptionalFieldsOmitted`.
+    /// Ports `SitemapGeneratorTests.testOptionalFieldsAreOmitted`.
     #[test]
     fn optional_fields_are_omitted_entirely() {
         let xml = SitemapGenerator::generate(&[SitemapUrl::new("https://e.com/")]);
@@ -174,7 +174,7 @@ mod tests {
         assert!(!xml.contains("<priority>"));
     }
 
-    /// Ports `SitemapGeneratorTests.testEmptyList`.
+    /// Ports `SitemapGeneratorTests.testEmptyURLListStillProducesAWellFormedDocument`.
     #[test]
     fn an_empty_sitemap_is_still_well_formed() {
         let xml = SitemapGenerator::generate(&[]);
@@ -182,7 +182,7 @@ mod tests {
         assert!(xml.ends_with("</urlset>"));
     }
 
-    /// Ports `SitemapGeneratorTests.testGenerateIndex`.
+    /// Ports `SitemapGeneratorTests.testGeneratesASitemapIndex`.
     #[test]
     fn an_index_lists_each_sitemap() {
         let xml = SitemapGenerator::generate_index(&[
@@ -197,5 +197,21 @@ mod tests {
         assert!(xml.contains("<lastmod>2026-01-15</lastmod>"));
         assert_eq!(xml.matches("<sitemap>").count(), 2);
         assert_eq!(xml.matches("<lastmod>").count(), 1);
+
+        // The Swift case checks that a query string in an index entry is escaped too, not
+        // just in `<urlset>`.
+        let escaped = SitemapGenerator::generate_index(&[(
+            "https://e.com/sitemap-pages.xml?v=2&full=1".into(),
+            None,
+        )]);
+        assert!(escaped.contains("v=2&amp;full=1"));
+    }
+
+    /// Ports `SitemapGeneratorTests.testSitemapIndexOmitsAMissingLastmod`.
+    #[test]
+    fn an_index_entry_without_a_lastmod_emits_no_element() {
+        let xml = SitemapGenerator::generate_index(&[("https://e.com/sitemap.xml".into(), None)]);
+
+        assert!(!xml.contains("<lastmod>"));
     }
 }

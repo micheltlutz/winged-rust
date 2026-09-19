@@ -249,7 +249,7 @@ mod tests {
         ));
     }
 
-    /// Ports `RSSGeneratorTests.testOptionalFieldsOmitted`.
+    /// Ports `RSSGeneratorTests.testOptionalChannelFieldsAreOmitted`.
     #[test]
     fn absent_channel_fields_are_omitted_rather_than_emitted_empty() {
         let xml = channel().generate(&[]);
@@ -263,7 +263,7 @@ mod tests {
         }
     }
 
-    /// Ports `RSSGeneratorTests.testGuidFallback`.
+    /// Ports `RSSGeneratorTests.testGuidDefaultsToTheItemLink`.
     #[test]
     fn the_guid_defaults_to_the_link() {
         let item = RssItem::new(
@@ -308,12 +308,75 @@ mod tests {
         assert_eq!(xml.matches("<category>").count(), 2);
     }
 
-    /// Ports `RSSGeneratorTests.testEmptyFeed`.
+    /// No Swift counterpart: its suite never renders a channel with no items on its own,
+    /// though several cases pass `items: []` while checking something else.
     #[test]
     fn a_feed_with_no_items_is_still_valid() {
         let xml = channel().generate(&[]);
         assert!(xml.starts_with("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<rss "));
         assert!(xml.ends_with("</rss>"));
         assert!(!xml.contains("<item>"));
+    }
+
+    /// Ports `RSSGeneratorTests.testEveryOptionalChannelFieldIsRendered`.
+    #[test]
+    fn every_optional_channel_field_is_rendered_when_supplied() {
+        let xml = channel()
+            .language("en")
+            .copyright("\u{a9} 2026")
+            .managing_editor("editor@e.com")
+            .webmaster("web@e.com")
+            .generate(&[]);
+
+        assert!(xml.contains("<copyright>\u{a9} 2026</copyright>"));
+        assert!(xml.contains("<managingEditor>editor@e.com</managingEditor>"));
+        assert!(xml.contains("<webMaster>web@e.com</webMaster>"));
+    }
+
+    /// Ports `RSSGeneratorTests.testItemWithoutOptionalFields`.
+    #[test]
+    fn an_item_without_optional_fields_emits_neither() {
+        let xml = channel().generate(&[RssItem::new(
+            "T",
+            "https://e.com/p",
+            "D",
+            "Tue, 11 Aug 2026 10:00:00 +0000",
+        )]);
+
+        assert!(!xml.contains("<author>"));
+        assert!(!xml.contains("<category>"));
+    }
+
+    /// Ports `RSSGeneratorTests.testExplicitGuidWinsOverTheLink`.
+    #[test]
+    fn an_explicit_guid_wins_over_the_link() {
+        let xml = channel().generate(&[RssItem::new(
+            "T",
+            "https://e.com/p",
+            "D",
+            "Tue, 11 Aug 2026 10:00:00 +0000",
+        )
+        .guid("urn:uuid:1234")]);
+
+        assert!(xml.contains(r#"<guid isPermaLink="true">urn:uuid:1234</guid>"#));
+    }
+
+    /// Ports `RSSGeneratorTests.testItemsAreRendered`.
+    #[test]
+    fn an_item_renders_every_field_it_is_given_xml_escaped() {
+        let xml = channel().generate(&[RssItem::new(
+            "Hello & welcome",
+            "https://example.com/hello",
+            "First <post>",
+            "Tue, 11 Aug 2026 10:00:00 +0000",
+        )
+        .author("me@example.com")
+        .categories(["swift", "html"])]);
+
+        assert!(xml.contains("<title>Hello &amp; welcome</title>"));
+        assert!(xml.contains("<description>First &lt;post&gt;</description>"));
+        assert!(xml.contains("<pubDate>Tue, 11 Aug 2026 10:00:00 +0000</pubDate>"));
+        assert!(xml.contains("<category>swift</category>"));
+        assert!(xml.contains("<category>html</category>"));
     }
 }
