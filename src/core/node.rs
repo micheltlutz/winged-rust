@@ -382,7 +382,7 @@ fn write_void_suffix(out: &mut String, options: &RenderOptions) {
 mod tests {
     use super::*;
     use crate::elements::{
-        body, code, div, h1, head, html_tag, i, img, li, p, pre, span, title, ul,
+        body, code, div, h1, head, html_tag, i, img, li, p, pre, span, textarea, title, ul,
     };
     // `macros` is declared after `core` in lib.rs, so `html!` is not in scope by position;
     // it is `#[macro_export]`ed, which puts it at the crate root.
@@ -453,7 +453,8 @@ mod tests {
         );
     }
 
-    /// Ports `WhitespaceTests`. Indenting inside `<pre>` would change what the browser shows.
+    /// Ports `WhitespaceTests.testPreWithCodeChildIsNotIndented` and
+    /// `WhitespaceTests.testPrettyMatchesCompactForWhitespaceSensitiveTags`. Indenting inside `<pre>` would change what the browser shows.
     #[test]
     fn whitespace_sensitive_tags_are_not_indented_inside() {
         let tree = div().child(pre().child(code().text("let page = html { }")));
@@ -463,7 +464,7 @@ mod tests {
         );
     }
 
-    /// Ports `PrettyPrintTests.testContentBeforeChildren`.
+    /// No Swift counterpart: its `PrettyPrintTests` never mixes content with children.
     #[test]
     fn content_goes_on_its_own_line_before_children() {
         let tree = div().text("lead").child(p().text("body"));
@@ -660,6 +661,72 @@ mod tests {
         assert_eq!(
             raw.render(),
             r#"<custom-element data-x="1"></custom-element>"#
+        );
+    }
+
+    /// Ports `PrettyPrintTests.testPrettyPrintSimpleTag`.
+    #[test]
+    fn a_tag_with_only_content_stays_on_one_line_when_pretty() {
+        assert_eq!(
+            div().text("Hello World").render_pretty(),
+            "<div>Hello World</div>"
+        );
+    }
+
+    /// Ports `PrettyPrintTests.testPrettyPrintWithChildren`.
+    #[test]
+    fn children_each_get_their_own_line_when_pretty() {
+        let tree = div()
+            .child(p().text("Paragraph 1"))
+            .child(p().text("Paragraph 2"));
+
+        assert_eq!(
+            tree.render_pretty(),
+            "<div>\n  <p>Paragraph 1</p>\n  <p>Paragraph 2</p>\n</div>"
+        );
+    }
+
+    /// Ports `PrettyPrintTests.testCompactRenderStillWorks`.
+    #[test]
+    fn compact_keeps_everything_on_one_line() {
+        assert_eq!(
+            div().child(p().text("Test")).render(),
+            "<div><p>Test</p></div>"
+        );
+    }
+
+    /// Ports `PrettyPrintTests.testSelfClosingTagPrettyPrint`.
+    #[test]
+    fn a_void_element_does_not_self_close_when_pretty() {
+        let rendered = img()
+            .attr("src", "test.jpg")
+            .attr("alt", "Test")
+            .render_pretty();
+
+        assert!(rendered.starts_with("<img"));
+        assert!(!rendered.contains("/>"));
+        assert!(rendered.ends_with('>'));
+    }
+
+    /// Ports `WhitespaceTests.testTextareaKeepsItsContentIntact`.
+    #[test]
+    fn a_textarea_keeps_its_newlines() {
+        let field = textarea().attr("name", "bio").text("line 1\nline 2");
+
+        assert_eq!(
+            field.render_pretty(),
+            "<textarea name=\"bio\">line 1\nline 2</textarea>"
+        );
+    }
+
+    /// Ports `WhitespaceTests.testNestedInsideAPrettyDocumentKeepsOuterIndentation`.
+    #[test]
+    fn a_pre_block_is_indented_from_the_outside_but_not_within() {
+        let container = div().child(pre().child(code().text("swift build")));
+
+        assert_eq!(
+            container.render_pretty(),
+            "<div>\n  <pre><code>swift build</code></pre>\n</div>"
         );
     }
 }
