@@ -6,6 +6,10 @@ on:
 
 permissions:
   contents: write
+  # `npm publish --provenance` mints an OIDC token through Sigstore, and GitHub only
+  # issues one when the job is allowed to. Without this, the npm step fails after the
+  # crate has already gone to crates.io — the worst place to discover it.
+  id-token: write
 
 jobs:
   release:
