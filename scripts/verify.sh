@@ -28,29 +28,29 @@ run() {
 
 cd "$(dirname "$0")/.."
 
-step "1/6  Build"
+step "1/7  Build"
 run "cargo build --all-features" cargo build --all-features
 run "cargo build --no-default-features" cargo build --no-default-features
 run "wasm32 target" cargo build --features wasm --target wasm32-unknown-unknown
 
-step "2/6  Test"
+step "2/7  Test"
 run "cargo test --all-features" cargo test --all-features
 
-step "3/6  Lint"
+step "3/7  Lint"
 run "cargo fmt --check" cargo fmt --all --check
 run "cargo clippy" cargo clippy --all-targets --all-features -- -D warnings
 
-step "4/6  Tag catalog freshness"
+step "4/7  Tag catalog freshness"
 if [ -x scripts/generate-tag-catalog.sh ]; then
   run "tag catalog is current" ./scripts/generate-tag-catalog.sh --check
 else
   fail "scripts/generate-tag-catalog.sh is missing or not executable"
 fi
 
-step "5/6  Golden fixtures"
+step "5/7  Golden fixtures"
 run "fixtures reproduce byte-for-byte" cargo test --test golden
 
-step "6/6  End-to-end smoke test"
+step "6/7  End-to-end smoke test"
 # A throwaway crate that depends on this checkout by path. This is what catches a library
 # that compiles in-tree but cannot actually be consumed — a broken feature gate, a type
 # that is not public, a doc example that only works with dev-dependencies in scope.
@@ -95,6 +95,19 @@ if (cd "$SMOKE_DIR" && cargo run --quiet > output.html 2>/tmp/winged-smoke.log);
 else
   fail "the smoke crate did not build"
   sed 's/^/      /' /tmp/winged-smoke.log | tail -40
+fi
+
+step "7/7  Winged-Swift cross-references"
+
+# Skips itself when the sibling checkout is absent, which is why it can sit in the gate:
+# CI never has Winged-Swift, and a contributor who does gets told when a `Ports` comment
+# names a test that no longer exists.
+if PARITY=$(./scripts/check-swift-parity.sh 2>&1); then
+  printf '%s\n' "$PARITY" | tail -3 | sed 's/^/      /'
+  ok "cross-references resolve"
+else
+  fail "a Ports comment names a Swift test that does not exist"
+  printf '%s\n' "$PARITY" | grep stale | sed 's/^/      /'
 fi
 
 printf '\n'

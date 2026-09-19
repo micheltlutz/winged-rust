@@ -28,6 +28,16 @@ SKIPPED_SUITES="DeprecatedAPITests BuilderInitCoverageTests"
 stale=0
 missing=0
 
+# A reference is any `SuiteTests.caseName` in backticks. Matching on the "Ports " prefix
+# instead would miss the second name in a two-line comment, which is where they wrap.
+references() {
+    # `SomeTests.swift` in prose is a file name, not a case reference.
+    grep -rhoE '`[A-Za-z0-9]+Tests\.[A-Za-z0-9_]+`' src tests |
+        tr -d '`' |
+        grep -v '\.swift$' |
+        sort -u
+}
+
 echo "==> Cross-references that name a Swift test"
 while read -r reference; do
     suite="${reference%%.*}"
@@ -39,7 +49,7 @@ while read -r reference; do
         echo "  stale  $reference — suite has no such test"
         stale=$((stale + 1))
     fi
-done < <(grep -rhoE 'Ports `[A-Za-z0-9]+Tests\.[A-Za-z0-9_]+' src tests | sed 's/Ports `//' | sort -u)
+done < <(references)
 
 [ "$stale" -eq 0 ] && echo "  all references resolve"
 
@@ -49,8 +59,7 @@ for file in "$SWIFT"/*.swift; do
     case " $SKIPPED_SUITES " in *" $suite "*) continue ;; esac
 
     while read -r name; do
-        grep -rq "Ports \`$suite\`" src tests && continue
-        if ! grep -rq "Ports \`$suite\.$name\`" src tests; then
+        if ! references | grep -qx "$suite.$name"; then
             echo "  missing  $suite.$name"
             missing=$((missing + 1))
         fi

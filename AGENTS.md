@@ -23,6 +23,7 @@ does not make obvious.
 | `cargo test --test golden` | the byte-for-byte parity gate |
 | `WINGED_UPDATE_FIXTURES=1 cargo test --test golden` | regenerate fixtures — only when markup was *meant* to change |
 | `./scripts/generate-tag-catalog.sh` | after adding or renaming an element |
+| `./scripts/check-swift-parity.sh` | after touching a test that names a Winged-Swift case |
 | `cargo clippy --all-targets --all-features -- -D warnings` | lint |
 | `cargo bench` | render performance |
 

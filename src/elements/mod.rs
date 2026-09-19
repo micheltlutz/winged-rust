@@ -850,4 +850,221 @@ mod tests {
         assert_eq!(br().render(), "<br>");
         assert_eq!(hr().render(), "<hr>");
     }
+
+    // Ports `CodeTests` and `HTML5TagsTests`.
+
+    /// Ports `CodeTests.testPreTag`.
+    #[test]
+    fn a_pre_block_keeps_its_line_breaks() {
+        let block =
+            pre().text("This is preformatted text.\nIt preserves whitespace and line breaks.");
+
+        assert_eq!(
+            block.render(),
+            "<pre>This is preformatted text.\nIt preserves whitespace and line breaks.</pre>"
+        );
+    }
+
+    /// Ports `CodeTests.testCodeTag`.
+    #[test]
+    fn a_code_block_keeps_its_line_breaks() {
+        let block = code().text("let x = 10\nprint(x)");
+
+        assert_eq!(block.render(), "<code>let x = 10\nprint(x)</code>");
+    }
+
+    /// Ports `CodeTests.testEmbedTag`.
+    #[test]
+    fn an_embed_is_a_void_element() {
+        assert_eq!(
+            embed()
+                .attr("src", "video.mp4")
+                .attr("type", "video/mp4")
+                .render(),
+            r#"<embed src="video.mp4" type="video/mp4">"#
+        );
+    }
+
+    /// Ports `HTML5TagsTests.testArticleTag`.
+    #[test]
+    fn an_article_wraps_its_children() {
+        assert_eq!(
+            article().child(h1().text("Title")).render(),
+            "<article><h1>Title</h1></article>"
+        );
+    }
+
+    /// Ports `HTML5TagsTests.testAsideTag`.
+    #[test]
+    fn an_aside_wraps_its_children() {
+        assert_eq!(
+            aside().child(p().text("Sidebar")).render(),
+            "<aside><p>Sidebar</p></aside>"
+        );
+    }
+
+    /// Ports `HTML5TagsTests.testFigureAndFigcaption`.
+    #[test]
+    fn a_figure_pairs_an_image_with_its_caption() {
+        let block = figure()
+            .child(image("image.jpg", "Test"))
+            .child(figcaption().text("Image caption"));
+
+        assert_eq!(
+            block.render(),
+            concat!(
+                r#"<figure><img src="image.jpg" alt="Test">"#,
+                "<figcaption>Image caption</figcaption></figure>",
+            )
+        );
+    }
+
+    /// Ports `HTML5TagsTests.testTimeTag`.
+    #[test]
+    fn a_time_element_carries_its_datetime() {
+        assert_eq!(
+            time()
+                .attr("datetime", "2024-01-15")
+                .text("January 15, 2024")
+                .render(),
+            r#"<time datetime="2024-01-15">January 15, 2024</time>"#
+        );
+    }
+
+    /// Ports `HTML5TagsTests.testMarkTag`.
+    #[test]
+    fn a_mark_element_renders_its_text() {
+        assert_eq!(
+            mark().text("highlighted").render(),
+            "<mark>highlighted</mark>"
+        );
+    }
+
+    /// Ports `HTML5TagsTests.testHeadingTags`.
+    #[test]
+    fn every_heading_level_renders_its_own_tag() {
+        let headings = [
+            h1().text("H1"),
+            h2().text("H2"),
+            h3().text("H3"),
+            h4().text("H4"),
+            h5().text("H5"),
+            h6().text("H6"),
+        ];
+
+        for (index, heading) in headings.into_iter().enumerate() {
+            let level = index + 1;
+            assert_eq!(heading.render(), format!("<h{level}>H{level}</h{level}>"));
+        }
+    }
+
+    // Ports `FormsTests`. Its Swift `@Suite` is declared as `FormTests` while the file is
+    // `FormsTests.swift`; the file name is what the cross-reference follows.
+
+    /// Ports `FormsTests.testFormCreation`.
+    #[test]
+    fn a_form_renders_its_fieldsets_and_submit() {
+        let form = form()
+            .attr("action", "/submit")
+            .child(
+                fieldset()
+                    .child(label_for("name").text("Name"))
+                    .child(input_named("text", "name")),
+            )
+            .child(
+                fieldset()
+                    .child(label_for("message").text("Message"))
+                    .child(textarea().attr("name", "message")),
+            )
+            .child(input_named("submit", "submit").attr("value", "Send"));
+
+        assert_eq!(
+            form.render(),
+            concat!(
+                r#"<form action="/submit"><fieldset><label for="name">Name</label>"#,
+                r#"<input type="text" name="name"></fieldset><fieldset>"#,
+                r#"<label for="message">Message</label>"#,
+                r#"<textarea name="message"></textarea></fieldset>"#,
+                r#"<input type="submit" name="submit" value="Send"></form>"#,
+            )
+        );
+    }
+
+    /// Ports `FormsTests.testSelectAndOptions`.
+    #[test]
+    fn a_select_renders_each_option() {
+        let select = select()
+            .attr("name", "options")
+            .children_from((1..=3).map(|i| {
+                option()
+                    .attr("value", i.to_string())
+                    .text(format!("Option {i}"))
+            }));
+
+        assert_eq!(
+            select.render(),
+            concat!(
+                r#"<select name="options"><option value="1">Option 1</option>"#,
+                r#"<option value="2">Option 2</option>"#,
+                r#"<option value="3">Option 3</option></select>"#,
+            )
+        );
+    }
+
+    /// Ports `FormsTests.testLabel`.
+    #[test]
+    fn a_label_points_at_its_field() {
+        assert_eq!(
+            label_for("username").text("Username").render(),
+            r#"<label for="username">Username</label>"#
+        );
+    }
+
+    /// Ports `FormsTests.testInput`.
+    #[test]
+    fn an_input_renders_its_type_name_and_value() {
+        assert_eq!(
+            input_named("text", "username")
+                .attr("value", "JohnDoe")
+                .render(),
+            r#"<input type="text" name="username" value="JohnDoe">"#
+        );
+    }
+
+    /// Ports `FormsTests.testTextarea`.
+    #[test]
+    fn a_textarea_renders_its_content_between_the_tags() {
+        assert_eq!(
+            textarea()
+                .attr("name", "message")
+                .text("Hello, World!")
+                .render(),
+            r#"<textarea name="message">Hello, World!</textarea>"#
+        );
+    }
+
+    /// Ports `FormsTests.testFieldset`.
+    #[test]
+    fn a_fieldset_groups_a_label_and_its_field() {
+        let block = fieldset()
+            .child(label_for("name").text("Name"))
+            .child(input_named("text", "name"));
+
+        assert_eq!(
+            block.render(),
+            concat!(
+                r#"<fieldset><label for="name">Name</label>"#,
+                r#"<input type="text" name="name"></fieldset>"#,
+            )
+        );
+    }
+
+    /// Ports `FormsTests.testSection`.
+    #[test]
+    fn a_section_wraps_its_children() {
+        assert_eq!(
+            section().child(p().text("This is a section.")).render(),
+            "<section><p>This is a section.</p></section>"
+        );
+    }
 }
