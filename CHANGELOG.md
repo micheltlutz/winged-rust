@@ -9,6 +9,11 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Fixed
 
+- `seo::common` emitted `<meta name="keywords" content="">` when given an empty list, where
+  Winged-Swift omits the tag. `SeoBuilder` already guarded against it, so the empty tag was
+  only reachable by calling `common` directly — the guard now lives in `common`, where both
+  entry points get it. Found by porting `SEOTests.testCommonOmitsEmptyKeywords`.
+
 - **Rendering no longer recurses**, so nesting depth is no longer bounded by the stack.
   The writer walks an explicit work stack, and `Element` tears its subtree down the same
   way. A 100,000-level tree renders in both modes and is freed without aborting; output is

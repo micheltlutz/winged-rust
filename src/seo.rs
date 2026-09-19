@@ -137,7 +137,11 @@ pub fn common(
         meta_name("description", description),
         meta_name("robots", robots),
     ];
-    if let Some(keywords) = keywords {
+    // An empty list is the same as no list: `content=""` says nothing and Winged-Swift
+    // omits the tag. The guard lives here rather than in `SeoBuilder` so both entry points
+    // agree — it used to be in the builder only, and calling `common` directly with an
+    // empty slice emitted the empty tag.
+    if let Some(keywords) = keywords.filter(|list| !list.is_empty()) {
         tags.push(meta_name("keywords", keywords.join(", ")));
     }
     if let Some(author) = author {
@@ -273,11 +277,7 @@ impl SeoBuilder {
         let mut tags = common(
             &self.title,
             &self.description,
-            if keywords.is_empty() {
-                None
-            } else {
-                Some(&keywords[..])
-            },
+            Some(&keywords[..]),
             self.author.as_deref(),
             &self.viewport,
             &self.robots,
@@ -315,7 +315,7 @@ mod tests {
         tags.iter().map(Render::render).collect()
     }
 
-    /// Ports `SEOTests.testOpenGraph`.
+    /// Ports `SEOTests.testOpenGraphMetaTags`.
     #[test]
     fn open_graph_emits_the_five_core_properties() {
         let tags = open_graph("T", "D", "/i.png", "https://e.com", "website", None);
@@ -332,7 +332,7 @@ mod tests {
         }
     }
 
-    /// Ports `SEOTests.testOpenGraphSiteName`.
+    /// Ports `SEOTests.testOpenGraphIncludesTheSiteName`.
     #[test]
     fn og_site_name_is_only_emitted_when_supplied() {
         assert_eq!(open_graph("T", "D", "i", "u", "website", None).len(), 5);
@@ -353,7 +353,7 @@ mod tests {
         assert!(!html.contains("article:modified_time"));
     }
 
-    /// Ports `SEOTests.testTwitterCard`.
+    /// Ports `SEOTests.testTwitterCardMetaTags`.
     #[test]
     fn twitter_card_defaults_to_a_large_image_summary() {
         let tags = twitter_card("T", "D", "i", DEFAULT_TWITTER_CARD, None, None);
@@ -361,7 +361,7 @@ mod tests {
         assert_eq!(tags.len(), 4);
     }
 
-    /// Ports `SEOTests.testCommon`, with the fixed `<title>`.
+    /// Ports `SEOTests.testCommonSEOTags`, with the fixed `<title>`.
     #[test]
     fn common_emits_a_title_unlike_the_swift_original() {
         let tags = common("Page", "D", None, None, DEFAULT_VIEWPORT, DEFAULT_ROBOTS);
@@ -384,7 +384,7 @@ mod tests {
         assert!(rendered(&tags).contains(r#"content="swift, motorcycle""#));
     }
 
-    /// Ports `SEOTests.testComplete`. The order is what the golden fixture encodes.
+    /// Ports `SEOTests.testCompleteSEOTags`. The order is what the golden fixture encodes.
     #[test]
     fn the_builder_emits_common_then_open_graph_then_twitter() {
         let html = rendered(&SeoBuilder::new("T", "D").image("i").url("u").build());
@@ -401,5 +401,64 @@ mod tests {
         assert!(html.contains(r#"property="og:title""#));
         assert!(html.contains("&amp;"));
         assert!(html.contains("&quot;"));
+    }
+
+    /// Ports `SEOTests.testArticleCarriesItsTimestamps`.
+    #[test]
+    fn an_article_carries_its_timestamps() {
+        let markup = rendered(&open_graph_article(
+            "T",
+            "D",
+            "I",
+            "U",
+            Some("Michel"),
+            Some("2026-08-11T10:00:00Z"),
+            Some("2026-08-12T10:00:00Z"),
+        ));
+
+        assert!(markup.contains(r#"<meta property="article:author" content="Michel">"#));
+        assert!(markup.contains(
+            r#"<meta property="article:published_time" content="2026-08-11T10:00:00Z">"#
+        ));
+        assert!(
+            markup.contains(
+                r#"<meta property="article:modified_time" content="2026-08-12T10:00:00Z">"#
+            )
+        );
+    }
+
+    /// Ports `SEOTests.testCommonOmitsEmptyKeywords`.
+    ///
+    /// Swift passes an empty array and expects no tag. Rust distinguishes "no keywords" as
+    /// `None`, and an empty slice has to behave the same way — an empty `content=""` would
+    /// be worse than nothing.
+    #[test]
+    fn empty_keywords_emit_no_tag() {
+        for keywords in [None, Some(&[][..])] {
+            let markup = rendered(&common(
+                "T",
+                "D",
+                keywords,
+                None,
+                DEFAULT_VIEWPORT,
+                DEFAULT_ROBOTS,
+            ));
+            assert!(!markup.contains("keywords"), "emitted for {keywords:?}");
+        }
+    }
+
+    /// Ports `SEOTests.testMetaWithProperty`.
+    #[test]
+    fn meta_property_renders_a_property_attribute() {
+        assert_eq!(
+            meta_property("og:title", "Test Title").render(),
+            r#"<meta property="og:title" content="Test Title">"#
+        );
+    }
+
+    /// Ports `SEOTests.testMetaWithCharset`.
+    #[test]
+    fn meta_charset_renders_a_charset_attribute() {
+        assert_eq!(meta_charset("UTF-8").render(), r#"<meta charset="UTF-8">"#);
     }
 }
