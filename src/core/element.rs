@@ -264,7 +264,10 @@ impl Drop for Element {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::elements::{button, div, p, span};
+    use crate::elements::{
+        a, body, button, div, footer, head, header, html_tag, img, li, main_tag, meta, nav, ol, p,
+        script, span, stylesheet, table, td, th, title, tr, ul,
+    };
 
     /// Ports `CSSHelpersTests.testAddClassAppends`.
     #[test]
@@ -367,5 +370,297 @@ mod tests {
     fn children_from_appends_a_sequence() {
         let list = div().children_from([p().text("a"), p().text("b")]);
         assert_eq!(list.render(), "<div><p>a</p><p>b</p></div>");
+    }
+
+    // Ports `HTMLTagTests`. Swift builds these through a result builder — `html { ... }` —
+    // which wraps everything in `<html>`; the Rust equivalent is an explicit `html_tag()`.
+
+    /// Ports `HTMLTagTests.testHTMLTagCreation`.
+    #[test]
+    fn a_tag_renders_its_attributes_then_its_content() {
+        let tag = Element::new("p")
+            .attr("class", "text")
+            .text("Hello, World!");
+
+        assert_eq!(tag.render(), r#"<p class="text">Hello, World!</p>"#);
+    }
+
+    /// Ports `HTMLTagTests.testHTMLTagWithMultipleAttributes`.
+    ///
+    /// Swift's `Img(src:alt:attributes:)` emits the extra attributes *before* `src` and
+    /// `alt`. The Rust `image(src, alt)` constructor puts them first instead, so matching
+    /// this byte for byte means going through the generic builder.
+    #[test]
+    fn extra_attributes_can_precede_the_typed_ones() {
+        let tag = img()
+            .attr("width", "100")
+            .attr("height", "100")
+            .attr("src", "image.png")
+            .attr("alt", "An image");
+
+        assert_eq!(
+            tag.render(),
+            r#"<img width="100" height="100" src="image.png" alt="An image">"#
+        );
+    }
+
+    /// Ports `HTMLTagTests.testHTMLBuilder`.
+    #[test]
+    fn nested_children_render_in_order() {
+        let document = html_tag().child(
+            div()
+                .child(p().text("This is a paragraph."))
+                .child(img().attr("src", "image.png").attr("alt", "An image")),
+        );
+
+        assert_eq!(
+            document.render(),
+            concat!(
+                "<html><div><p>This is a paragraph.</p>",
+                r#"<img src="image.png" alt="An image"></div></html>"#,
+            )
+        );
+    }
+
+    /// Ports `HTMLTagTests.testHTMLBuilderWithAttributes`.
+    #[test]
+    fn a_container_renders_its_class_before_its_children() {
+        let document = html_tag().child(
+            div()
+                .add_class("main-body")
+                .child(p().text("Title"))
+                .child(p().text("This is a paragraph.")),
+        );
+
+        assert_eq!(
+            document.render(),
+            r#"<html><div class="main-body"><p>Title</p><p>This is a paragraph.</p></div></html>"#
+        );
+    }
+
+    /// Ports `HTMLTagTests.testHTMLTable`.
+    #[test]
+    fn a_table_renders_its_rows_and_cells() {
+        let document = html_tag().child(
+            table()
+                .add_class("table")
+                .child(
+                    tr().child(th().text("Header 1"))
+                        .child(th().text("Header 2")),
+                )
+                .child(
+                    tr().child(td().text("Row 1, Cell 1"))
+                        .child(td().text("Row 1, Cell 2")),
+                )
+                .child(
+                    tr().child(td().text("Row 2, Cell 1"))
+                        .child(td().text("Row 2, Cell 2")),
+                ),
+        );
+
+        assert_eq!(
+            document.render(),
+            concat!(
+                r#"<html><table class="table"><tr><th>Header 1</th><th>Header 2</th></tr>"#,
+                "<tr><td>Row 1, Cell 1</td><td>Row 1, Cell 2</td></tr>",
+                "<tr><td>Row 2, Cell 1</td><td>Row 2, Cell 2</td></tr></table></html>",
+            )
+        );
+    }
+
+    /// Ports `HTMLTagTests.testHTMLList`.
+    #[test]
+    fn an_unordered_list_renders_its_items() {
+        let document = html_tag().child(
+            ul().add_class("unordered-list")
+                .child(li().text("Item 1"))
+                .child(li().text("Item 2"))
+                .child(li().text("Item 3")),
+        );
+
+        assert_eq!(
+            document.render(),
+            concat!(
+                r#"<html><ul class="unordered-list">"#,
+                "<li>Item 1</li><li>Item 2</li><li>Item 3</li></ul></html>",
+            )
+        );
+    }
+
+    /// Ports `HTMLTagTests.testHTMLOrderedList`.
+    #[test]
+    fn an_ordered_list_renders_its_items() {
+        let document = html_tag().child(
+            ol().add_class("ordered-list")
+                .child(li().text("First"))
+                .child(li().text("Second"))
+                .child(li().text("Third")),
+        );
+
+        assert_eq!(
+            document.render(),
+            concat!(
+                r#"<html><ol class="ordered-list">"#,
+                "<li>First</li><li>Second</li><li>Third</li></ol></html>",
+            )
+        );
+    }
+
+    /// Ports `HTMLTagTests.testHTMLDescriptionList`.
+    ///
+    /// Swift reaches for the untyped `HTMLTag("dt", content:)` here; `Element::new` is the
+    /// same escape hatch in Rust, and the point of the test is that it renders like any
+    /// generated constructor.
+    #[test]
+    fn a_description_list_renders_terms_and_descriptions() {
+        let document = html_tag().child(
+            Element::new("dl")
+                .add_class("description-list")
+                .child(Element::new("dt").text("Term 1"))
+                .child(Element::new("dd").text("Description 1"))
+                .child(Element::new("dt").text("Term 2"))
+                .child(Element::new("dd").text("Description 2")),
+        );
+
+        assert_eq!(
+            document.render(),
+            concat!(
+                r#"<html><dl class="description-list">"#,
+                "<dt>Term 1</dt><dd>Description 1</dd>",
+                "<dt>Term 2</dt><dd>Description 2</dd></dl></html>",
+            )
+        );
+    }
+
+    /// Ports `HTMLTagTests.testHTMLStructuralTags`.
+    #[test]
+    fn the_structural_tags_nest_into_a_page() {
+        let document = html_tag()
+            .child(
+                head()
+                    .child(
+                        meta()
+                            .attr("name", "description")
+                            .attr("content", "A description of the page"),
+                    )
+                    .child(stylesheet("styles.css")),
+            )
+            .child(
+                body()
+                    .child(
+                        header().child(
+                            nav()
+                                .child(a().attr("href", "#home").text("Home"))
+                                .child(a().attr("href", "#about").text("About"))
+                                .child(a().attr("href", "#contact").text("Contact")),
+                        ),
+                    )
+                    .child(main_tag().child(p().text("Welcome to our website!")))
+                    .child(footer().child(p().text("\u{a9} 2024 Company, Inc."))),
+            );
+
+        assert_eq!(
+            document.render(),
+            concat!(
+                r#"<html><head><meta name="description" content="A description of the page">"#,
+                r#"<link href="styles.css" rel="stylesheet"></head><body><header><nav>"#,
+                r##"<a href="#home">Home</a><a href="#about">About</a>"##,
+                r##"<a href="#contact">Contact</a></nav></header>"##,
+                "<main><p>Welcome to our website!</p></main>",
+                "<footer><p>\u{a9} 2024 Company, Inc.</p></footer></body></html>",
+            )
+        );
+    }
+
+    /// Ports `HTMLTagTests.testHTMLScript`.
+    ///
+    /// `raw_text`, not `text`: escaping the body would turn `'Hello World'` into
+    /// `&#39;Hello World&#39;` and the browser would run that literally. Swift's `Script`
+    /// has the same carve-out built into the type.
+    #[test]
+    fn a_script_body_is_not_escaped() {
+        let document = html_tag().child(
+            script()
+                .attr("type", "text/javascript")
+                .raw_text("alert('Hello World');"),
+        );
+
+        assert_eq!(
+            document.render(),
+            r#"<html><script type="text/javascript">alert('Hello World');</script></html>"#
+        );
+    }
+
+    /// Ports `HTMLTagTests.testMetaWithName`.
+    #[test]
+    fn meta_renders_both_the_named_and_the_charset_form() {
+        let document = html_tag()
+            .child(
+                meta()
+                    .attr("name", "description")
+                    .attr("content", "A description of the page"),
+            )
+            .child(meta().attr("charset", "utf-8"));
+
+        assert_eq!(
+            document.render(),
+            concat!(
+                r#"<html><meta name="description" content="A description of the page">"#,
+                r#"<meta charset="utf-8"></html>"#,
+            )
+        );
+    }
+
+    /// Ports `HTMLTagTests.testHTMLTitle`.
+    #[test]
+    fn a_title_renders_its_text() {
+        let document = html_tag().child(title().text("Title my site"));
+
+        assert_eq!(
+            document.render(),
+            "<html><title>Title my site</title></html>"
+        );
+    }
+
+    /// Ports `HTMLTagTests.testHTMLSpan`.
+    #[test]
+    fn a_span_renders_its_attributes_and_content() {
+        let tag = span().attr("class", "text").text("Hello, World!");
+
+        assert_eq!(tag.render(), r#"<span class="text">Hello, World!</span>"#);
+    }
+
+    /// Ports `HTMLTagTests.testHTMLButton`.
+    ///
+    /// Swift's `Button` defaults to `type="button"` and appends it after the caller's
+    /// attributes. `button_typed` in Rust puts the type first, so the order here comes from
+    /// the generic builder.
+    #[test]
+    fn a_button_carries_its_type_after_its_class() {
+        let document = html_tag().child(button().add_class("button-class").attr("type", "button"));
+
+        assert_eq!(
+            document.render(),
+            r#"<html><button class="button-class" type="button"></button></html>"#
+        );
+    }
+
+    /// Ports `HTMLTagTests.testHTMLButtonChildren`.
+    #[test]
+    fn a_button_renders_its_children() {
+        let document = html_tag().child(
+            button()
+                .add_class("button-class")
+                .attr("type", "button")
+                .child(span().add_class("icon-bar")),
+        );
+
+        assert_eq!(
+            document.render(),
+            concat!(
+                r#"<html><button class="button-class" type="button">"#,
+                r#"<span class="icon-bar"></span></button></html>"#,
+            )
+        );
     }
 }

@@ -330,7 +330,7 @@ pub fn iframe_titled(src: impl AsRef<str>, title_text: impl AsRef<str>) -> Eleme
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::core::Render;
+    use crate::core::{Render, RenderOptions};
 
     #[test]
     fn the_catalog_covers_every_generated_tag() {
@@ -392,5 +392,462 @@ mod tests {
         let rendered = iframe_titled("/embed", "A map").render();
         assert!(rendered.contains(r#"title="A map""#));
         assert!(rendered.contains(r#"loading="lazy""#));
+    }
+
+    // Ports `TagCatalogTests`. Winged-Swift reaches these shapes through typed initialisers
+    // (`Video(src:controls:muted:)`, `Progress(value:max:)`, `Col(span:)`); the Rust port
+    // has the generic builder instead, so each test asserts the same rendered markup rather
+    // than the initialiser that produced it.
+
+    /// Ports `TagCatalogTests.testTableStructure`.
+    #[test]
+    fn a_table_renders_every_section_in_order() {
+        let table = table()
+            .child(caption().text("Sales"))
+            .child(colgroup().child(col().attr("span", "2")))
+            .child(thead().child(tr().child(th().text("Month")).child(th().text("Total"))))
+            .child(tbody().child(tr().child(td().text("Jan")).child(td().text("10"))))
+            .child(tfoot().child(tr().child(td().text("Sum")).child(td().text("10"))));
+
+        assert_eq!(
+            table.render(),
+            concat!(
+                "<table><caption>Sales</caption>",
+                r#"<colgroup><col span="2"></colgroup>"#,
+                "<thead><tr><th>Month</th><th>Total</th></tr></thead>",
+                "<tbody><tr><td>Jan</td><td>10</td></tr></tbody>",
+                "<tfoot><tr><td>Sum</td><td>10</td></tr></tfoot></table>",
+            )
+        );
+    }
+
+    /// Ports `TagCatalogTests.testVoidElementsRenderWithoutClosingTag`.
+    #[test]
+    fn void_elements_render_without_a_closing_tag() {
+        assert_eq!(col().render(), "<col>");
+        assert_eq!(wbr().render(), "<wbr>");
+        assert_eq!(
+            base().attr("href", "https://example.com/").render(),
+            r#"<base href="https://example.com/">"#
+        );
+        assert_eq!(
+            source()
+                .attr("srcset", "a.webp")
+                .attr("type", "image/webp")
+                .render(),
+            r#"<source srcset="a.webp" type="image/webp">"#
+        );
+        assert_eq!(
+            track()
+                .attr("src", "cc.vtt")
+                .attr("kind", "subtitles")
+                .attr("srclang", "en")
+                .bool_attr("default")
+                .render(),
+            r#"<track src="cc.vtt" kind="subtitles" srclang="en" default>"#
+        );
+    }
+
+    /// Ports `TagCatalogTests.testVoidElementsHonourXHTMLMode`.
+    #[test]
+    fn void_elements_honour_xhtml_mode() {
+        let options = RenderOptions::compact().with_xhtml_self_closing(true);
+
+        assert_eq!(col().render_with(&options), "<col />");
+        assert_eq!(wbr().render_with(&options), "<wbr />");
+    }
+
+    /// Ports `TagCatalogTests.testPictureWithSources`.
+    #[test]
+    fn a_picture_wraps_its_sources_and_fallback_image() {
+        let picture = picture()
+            .child(
+                source()
+                    .attr("srcset", "/img/hero.avif")
+                    .attr("type", "image/avif"),
+            )
+            .child(image("/img/hero.jpg", "Hero"));
+
+        assert_eq!(
+            picture.render(),
+            concat!(
+                r#"<picture><source srcset="/img/hero.avif" type="image/avif">"#,
+                r#"<img src="/img/hero.jpg" alt="Hero"></picture>"#,
+            )
+        );
+    }
+
+    /// Ports `TagCatalogTests.testVideoBooleanAttributes`.
+    #[test]
+    fn video_boolean_attributes_render_bare() {
+        let rendered = video()
+            .attr("src", "/demo.mp4")
+            .attr("poster", "/poster.jpg")
+            .bool_attr("controls")
+            .bool_attr("muted")
+            .render();
+
+        assert_eq!(
+            rendered,
+            r#"<video src="/demo.mp4" poster="/poster.jpg" controls muted></video>"#
+        );
+        assert!(!rendered.contains("autoplay"));
+    }
+
+    /// Ports `TagCatalogTests.testAudioWithoutControls`.
+    #[test]
+    fn audio_without_controls_has_no_boolean_attribute() {
+        assert_eq!(
+            audio().attr("src", "/song.mp3").render(),
+            r#"<audio src="/song.mp3"></audio>"#
+        );
+    }
+
+    /// Ports `TagCatalogTests.testIframeRequiresTitleAndDefaultsToLazyLoading`.
+    #[test]
+    fn an_iframe_carries_its_title_and_lazy_loading() {
+        assert_eq!(
+            iframe_titled("https://example.com", "Example").render(),
+            r#"<iframe src="https://example.com" title="Example" loading="lazy"></iframe>"#
+        );
+    }
+
+    /// Ports `TagCatalogTests.testDetailsAndSummary`.
+    #[test]
+    fn details_renders_open_with_a_summary() {
+        let details = details()
+            .bool_attr("open")
+            .child(summary().text("More"))
+            .child(p().text("Hidden text"));
+
+        assert_eq!(
+            details.render(),
+            "<details open><summary>More</summary><p>Hidden text</p></details>"
+        );
+    }
+
+    /// Ports `TagCatalogTests.testDetailsClosedByDefault`.
+    #[test]
+    fn details_is_closed_unless_open_is_set() {
+        assert_eq!(
+            details().child(summary().text("More")).render(),
+            "<details><summary>More</summary></details>"
+        );
+    }
+
+    /// Ports `TagCatalogTests.testDefinitionList`.
+    #[test]
+    fn a_definition_list_pairs_terms_with_descriptions() {
+        let list = dl()
+            .child(dt().text("WingedSwift"))
+            .child(dd().text("An HTML DSL for Swift"));
+
+        assert_eq!(
+            list.render(),
+            "<dl><dt>WingedSwift</dt><dd>An HTML DSL for Swift</dd></dl>"
+        );
+    }
+
+    /// Ports `TagCatalogTests.testTextSemanticTags`.
+    #[test]
+    fn the_text_semantic_tags_render_their_own_names() {
+        assert_eq!(
+            blockquote().text("Quoted").render(),
+            "<blockquote>Quoted</blockquote>"
+        );
+        assert_eq!(
+            q().attr("cite", "https://example.com")
+                .text("Short")
+                .render(),
+            r#"<q cite="https://example.com">Short</q>"#
+        );
+        assert_eq!(cite().text("Moby Dick").render(), "<cite>Moby Dick</cite>");
+        assert_eq!(
+            abbr()
+                .attr("title", "HyperText Markup Language")
+                .text("HTML")
+                .render(),
+            r#"<abbr title="HyperText Markup Language">HTML</abbr>"#
+        );
+        assert_eq!(address().text("Rua 1").render(), "<address>Rua 1</address>");
+        assert_eq!(sub().text("2").render(), "<sub>2</sub>");
+        assert_eq!(sup().text("2").render(), "<sup>2</sup>");
+        assert_eq!(del().text("old").render(), "<del>old</del>");
+        assert_eq!(ins().text("new").render(), "<ins>new</ins>");
+        assert_eq!(kbd().text("\u{2318}S").render(), "<kbd>\u{2318}S</kbd>");
+        assert_eq!(samp().text("ok").render(), "<samp>ok</samp>");
+        assert_eq!(var().text("x").render(), "<var>x</var>");
+        assert_eq!(dialog().text("Hi").render(), "<dialog>Hi</dialog>");
+        assert_eq!(
+            noscript().text("Enable JS").render(),
+            "<noscript>Enable JS</noscript>"
+        );
+        assert_eq!(
+            canvas().attr("width", "300").render(),
+            r#"<canvas width="300"></canvas>"#
+        );
+    }
+
+    /// Ports `TagCatalogTests.testStyleDoesNotEscapeCSS`.
+    ///
+    /// Winged-Swift's `Style` never escapes its content. The Rust port has no such special
+    /// case — `text()` escapes everything — so CSS goes in through `raw_text`, which is the
+    /// documented escape hatch and greppable on purpose. Escaping here would turn a child
+    /// selector into `a &gt; b` and break the sheet.
+    #[test]
+    fn a_stylesheet_is_not_escaped() {
+        assert_eq!(
+            style()
+                .attr("media", "screen")
+                .raw_text("a > b { color: red; }")
+                .render(),
+            r#"<style media="screen">a > b { color: red; }</style>"#
+        );
+    }
+
+    /// Ports `TagCatalogTests.optionalMediaParametersAreOmittedWhenNil`.
+    ///
+    /// There is nothing to omit in Rust: an attribute exists when you call `attr` for it.
+    /// What survives the port is the rendered shape each of those Swift calls produced.
+    #[test]
+    fn media_elements_render_only_the_attributes_they_are_given() {
+        assert_eq!(
+            source()
+                .attr("src", "a.mp4")
+                .attr("media", "(min-width: 40em)")
+                .render(),
+            r#"<source src="a.mp4" media="(min-width: 40em)">"#
+        );
+        assert_eq!(
+            track()
+                .attr("src", "t.vtt")
+                .attr("kind", "captions")
+                .attr("label", "PT")
+                .render(),
+            r#"<track src="t.vtt" kind="captions" label="PT">"#
+        );
+        assert_eq!(
+            video().bool_attr("controls").render(),
+            "<video controls></video>"
+        );
+        assert_eq!(
+            audio().bool_attr("autoplay").bool_attr("loop").render(),
+            "<audio autoplay loop></audio>"
+        );
+        assert_eq!(
+            iframe()
+                .attr("src", "/e")
+                .attr("title", "E")
+                .bool_attr("allowfullscreen")
+                .render(),
+            r#"<iframe src="/e" title="E" allowfullscreen></iframe>"#
+        );
+        assert_eq!(
+            base().attr("href", "/").attr("target", "_blank").render(),
+            r#"<base href="/" target="_blank">"#
+        );
+        assert_eq!(col().render(), "<col>");
+        assert_eq!(q().text("quoted").render(), "<q>quoted</q>");
+    }
+
+    /// Ports `TagCatalogTests.metaSupportsEveryForm`.
+    #[test]
+    fn meta_renders_whichever_attributes_it_is_given() {
+        assert_eq!(
+            meta()
+                .attr("http-equiv", "refresh")
+                .attr("content", "5")
+                .render(),
+            r#"<meta http-equiv="refresh" content="5">"#
+        );
+        assert_eq!(
+            meta().attr("itemprop", "name").render(),
+            r#"<meta itemprop="name">"#
+        );
+    }
+
+    /// Ports `TagCatalogTests.testFlowContainersAcceptContent`.
+    #[test]
+    fn flow_containers_accept_text_as_well_as_children() {
+        assert_eq!(aside().text("Note").render(), "<aside>Note</aside>");
+        assert_eq!(nav().text("Menu").render(), "<nav>Menu</nav>");
+        assert_eq!(header().text("Top").render(), "<header>Top</header>");
+        assert_eq!(footer().text("Bottom").render(), "<footer>Bottom</footer>");
+        assert_eq!(main_tag().text("Body").render(), "<main>Body</main>");
+        assert_eq!(article().text("Post").render(), "<article>Post</article>");
+        assert_eq!(figure().text("Fig").render(), "<figure>Fig</figure>");
+        assert_eq!(form().text("F").render(), "<form>F</form>");
+        assert_eq!(fieldset().text("Set").render(), "<fieldset>Set</fieldset>");
+    }
+
+    /// Ports `TagCatalogTests.testFlowContainerContentIsEscaped`.
+    #[test]
+    fn flow_container_content_is_escaped() {
+        assert_eq!(
+            aside().text("<b>x</b>").render(),
+            "<aside>&lt;b&gt;x&lt;/b&gt;</aside>"
+        );
+    }
+
+    /// Ports `TagCatalogTests.testFieldsetWithLegend`.
+    #[test]
+    fn a_fieldset_carries_a_legend_and_its_fields() {
+        let fieldset = fieldset()
+            .child(legend().text("Account"))
+            .child(input_named("text", "email"));
+
+        assert_eq!(
+            fieldset.render(),
+            r#"<fieldset><legend>Account</legend><input type="text" name="email"></fieldset>"#
+        );
+    }
+
+    /// Ports `TagCatalogTests.testSelectWithOptgroup`.
+    #[test]
+    fn a_select_groups_its_options() {
+        let select = select().attr("name", "city").child(
+            optgroup()
+                .attr("label", "Brazil")
+                .child(option().attr("value", "sp").text("S\u{e3}o Paulo")),
+        );
+
+        assert_eq!(
+            select.render(),
+            concat!(
+                r#"<select name="city"><optgroup label="Brazil">"#,
+                "<option value=\"sp\">S\u{e3}o Paulo</option></optgroup></select>",
+            )
+        );
+    }
+
+    /// Ports `TagCatalogTests.testDatalistProgressMeterAndOutput`.
+    #[test]
+    fn the_form_display_elements_render() {
+        assert_eq!(
+            datalist().child(option().attr("value", "swift")).render(),
+            r#"<datalist><option value="swift"></option></datalist>"#
+        );
+        assert_eq!(
+            progress().attr("value", "0.7").attr("max", "1.0").render(),
+            r#"<progress value="0.7" max="1.0"></progress>"#
+        );
+        assert_eq!(
+            progress().attr("max", "1.0").render(),
+            r#"<progress max="1.0"></progress>"#
+        );
+        assert_eq!(
+            meter()
+                .attr("value", "6.0")
+                .attr("min", "0.0")
+                .attr("max", "10.0")
+                .render(),
+            r#"<meter value="6.0" min="0.0" max="10.0"></meter>"#
+        );
+        assert_eq!(output().text("42").render(), "<output>42</output>");
+    }
+
+    // Ports the element half of `HTML14FeaturesTests`; the `RawHTML` and fragment half
+    // lives in `crate::core::node`.
+
+    /// Ports `HTML14FeaturesTests.testBooleanAttribute`.
+    #[test]
+    fn boolean_attributes_carry_no_value() {
+        let rendered = input_named("checkbox", "agree")
+            .bool_attr("checked")
+            .bool_attr("required")
+            .render();
+
+        assert_eq!(
+            rendered,
+            r#"<input type="checkbox" name="agree" checked required>"#
+        );
+        assert!(!rendered.contains("checked="));
+        assert!(!rendered.contains("required="));
+    }
+
+    /// Ports `HTML14FeaturesTests.testHTML5SelfClosingDefault`.
+    #[test]
+    fn void_elements_do_not_self_close_by_default() {
+        let rendered = image("a.png", "A").render();
+
+        assert_eq!(rendered, r#"<img src="a.png" alt="A">"#);
+        assert!(!rendered.contains("/>"));
+    }
+
+    /// Ports `HTML14FeaturesTests.testXHTMLSelfClosingOption`.
+    #[test]
+    fn xhtml_mode_self_closes_void_elements() {
+        let options = RenderOptions::compact().with_xhtml_self_closing(true);
+
+        assert_eq!(
+            image("a.png", "A").render_with(&options),
+            r#"<img src="a.png" alt="A" />"#
+        );
+    }
+
+    /// Ports `HTML14FeaturesTests.testIAndAWithChildren`.
+    #[test]
+    fn anchors_and_headings_take_element_children() {
+        assert_eq!(
+            link_to("/news").child(image("thumb.jpg", "Thumb")).render(),
+            r#"<a href="/news"><img src="thumb.jpg" alt="Thumb"></a>"#
+        );
+        assert_eq!(
+            h3().child(link_to("/news").text("Headline")).render(),
+            r#"<h3><a href="/news">Headline</a></h3>"#
+        );
+        assert_eq!(
+            i().add_class("fas fa-search").render(),
+            r#"<i class="fas fa-search"></i>"#
+        );
+    }
+
+    /// Ports `HTML14FeaturesTests.testButtonSubmitType`.
+    #[test]
+    fn a_submit_button_carries_its_type() {
+        assert_eq!(
+            button_typed("submit").text("Send").render(),
+            r#"<button type="submit">Send</button>"#
+        );
+    }
+
+    /// Ports `HTML14FeaturesTests.testLabelWithoutFor`.
+    #[test]
+    fn a_label_without_a_target_has_no_for_attribute() {
+        let rendered = label().text("Accept cookies").render();
+
+        assert_eq!(rendered, "<label>Accept cookies</label>");
+        assert!(!rendered.contains("for="));
+    }
+
+    /// Ports `HTML14FeaturesTests.testInputWithoutName`.
+    #[test]
+    fn an_input_without_a_name_has_no_name_attribute() {
+        let rendered = input()
+            .attr("type", "search")
+            .attr("placeholder", "Search")
+            .render();
+
+        assert_eq!(rendered, r#"<input type="search" placeholder="Search">"#);
+        assert!(!rendered.contains("name="));
+    }
+
+    /// Ports `HTML14FeaturesTests.testSectionWithContent`.
+    #[test]
+    fn a_section_renders_its_class_and_text() {
+        assert_eq!(
+            section().add_class("hero").text("Hello").render(),
+            r#"<section class="hero">Hello</section>"#
+        );
+    }
+
+    /// Ports `HTML14FeaturesTests.testInlineSemanticTags`.
+    #[test]
+    fn the_inline_semantic_tags_render() {
+        assert_eq!(strong().text("bold").render(), "<strong>bold</strong>");
+        assert_eq!(em().text("emph").render(), "<em>emph</em>");
+        assert_eq!(small().text("fine").render(), "<small>fine</small>");
+        assert_eq!(br().render(), "<br>");
+        assert_eq!(hr().render(), "<hr>");
     }
 }

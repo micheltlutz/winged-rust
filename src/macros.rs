@@ -361,4 +361,195 @@ mod tests {
             "<div>\n  <section>\n    <p>deep</p>\n  </section>\n</div>"
         );
     }
+
+    // Ports `BuilderInitTests`, whose thesis is that Swift's result-builder initialiser is
+    // *exactly* equivalent to the array one. `html!` makes the same promise here — rule 9
+    // of AGENTS.md: sugar over the builder, never a second code path — so each of these
+    // asserts the macro and the builder agree, and then pins the markup.
+
+    /// Ports `BuilderInitTests.plainContainer`.
+    #[test]
+    fn the_macro_and_the_builder_agree_on_a_plain_container() {
+        let macro_built = html! { div { p { "Hi" } } };
+        let builder_built = div().child(p().text("Hi"));
+
+        assert_eq!(macro_built.render(), builder_built.render());
+        assert_eq!(macro_built.render(), "<div><p>Hi</p></div>");
+    }
+
+    /// Ports `BuilderInitTests.containerWithRequiredAttribute`.
+    #[test]
+    fn the_macro_and_the_builder_agree_on_a_required_attribute() {
+        let macro_built = html! { a(href = "/docs") { span { "Docs" } } };
+        let builder_built = link_to("/docs").child(span().text("Docs"));
+
+        assert_eq!(macro_built.render(), builder_built.render());
+        assert_eq!(
+            macro_built.render(),
+            r#"<a href="/docs"><span>Docs</span></a>"#
+        );
+    }
+
+    /// Ports `BuilderInitTests.containerWithAttributesAndContent`.
+    #[test]
+    fn attributes_and_children_render_together() {
+        assert_eq!(
+            html! { div(id = "main") { p { "Hi" } } }.render(),
+            r#"<div id="main"><p>Hi</p></div>"#
+        );
+    }
+
+    /// Ports `BuilderInitTests.booleanFlagIsPreserved`.
+    #[test]
+    fn a_boolean_flag_survives_the_macro() {
+        assert_eq!(
+            html! { details(open) { summary { "More" } } }.render(),
+            "<details open><summary>More</summary></details>"
+        );
+    }
+
+    /// Ports `BuilderInitTests.tableFamily`.
+    #[test]
+    fn the_table_family_nests() {
+        let markup = html! {
+            table {
+                thead { tr { th { "A" } } }
+                tbody { tr { td { "1" } } }
+            }
+        };
+
+        assert_eq!(
+            markup.render(),
+            "<table><thead><tr><th>A</th></tr></thead><tbody><tr><td>1</td></tr></tbody></table>"
+        );
+    }
+
+    /// Ports `BuilderInitTests.formFamily`.
+    ///
+    /// `for` is a Rust keyword, so the attribute name is quoted — the one place the macro
+    /// asks for punctuation the Swift builder does not.
+    #[test]
+    fn the_form_family_nests() {
+        let markup = html! {
+            form {
+                fieldset {
+                    legend { "Account" }
+                    label("for" = "email") { "Email" }
+                }
+            }
+        };
+
+        assert_eq!(
+            markup.render(),
+            concat!(
+                "<form><fieldset><legend>Account</legend>",
+                r#"<label for="email">Email</label></fieldset></form>"#,
+            )
+        );
+    }
+
+    /// Ports `BuilderInitTests.mediaFamily`.
+    #[test]
+    fn the_media_family_nests() {
+        let markup = html! {
+            picture {
+                source(srcset = "a.webp", "type" = "image/webp")
+                img(src = "a.jpg", alt = "A")
+            }
+        };
+
+        assert_eq!(
+            markup.render(),
+            concat!(
+                r#"<picture><source srcset="a.webp" type="image/webp">"#,
+                r#"<img src="a.jpg" alt="A"></picture>"#,
+            )
+        );
+    }
+
+    /// Ports `BuilderInitTests.loopsInsideTheBuilder`.
+    #[test]
+    fn a_loop_inside_the_macro_repeats_its_body() {
+        let markup = html! { ul { @for name in ["a", "b", "c"] { li { (name) } } } };
+
+        assert_eq!(markup.render(), "<ul><li>a</li><li>b</li><li>c</li></ul>");
+    }
+
+    /// Ports `BuilderInitTests.conditionsInsideTheBuilder`.
+    #[test]
+    fn a_false_condition_inside_the_macro_renders_nothing() {
+        let is_admin = false;
+        let markup = html! {
+            nav {
+                a(href = "/") { "Home" }
+                @if is_admin { a(href = "/admin") { "Admin" } }
+            }
+        };
+
+        assert_eq!(markup.render(), r#"<nav><a href="/">Home</a></nav>"#);
+    }
+
+    /// Ports `BuilderInitTests.mapInsideTheBuilder`.
+    ///
+    /// Swift drops a `map` straight into the builder. The macro takes an iterator through
+    /// `@for` instead, and `children_from` is the builder's spelling of the same thing —
+    /// the test is that both land on identical markup.
+    #[test]
+    fn a_mapped_sequence_matches_the_macro_loop() {
+        let macro_built = html! { ol { @for item in ["x", "y"] { li { (item) } } } };
+        let builder_built = ol().children_from(["x", "y"].map(|item| li().text(item)));
+
+        assert_eq!(macro_built.render(), builder_built.render());
+        assert_eq!(macro_built.render(), "<ol><li>x</li><li>y</li></ol>");
+    }
+
+    /// Ports `BuilderInitTests.emptyBuilderProducesAnEmptyElement`.
+    #[test]
+    fn an_empty_body_produces_an_empty_element() {
+        assert_eq!(html! { div {} }.render(), "<div></div>");
+    }
+
+    /// Ports `BuilderInitTests.untypedElementSupportsTheBuilder`.
+    ///
+    /// The macro resolves a tag name to its generated constructor, and there is no
+    /// `hgroup()` among the 93 — Winged-Swift has no `Hgroup` type either, which is why its
+    /// own test reaches for the untyped `HTMLTag`. `Element::new` is that escape hatch here,
+    /// and it composes with macro-built children.
+    #[test]
+    fn an_untyped_element_takes_macro_built_children() {
+        let group = Element::new("hgroup")
+            .child(html! { h1 { "Title" } })
+            .child(html! { p { "Subtitle" } });
+
+        assert_eq!(
+            group.render(),
+            "<hgroup><h1>Title</h1><p>Subtitle</p></hgroup>"
+        );
+    }
+
+    /// Ports `BuilderInitTests.chainingStillPreservesTheType`.
+    ///
+    /// Swift's builder initialiser returns the concrete tag type, so `.addClass` chains off
+    /// it. `html!` returns a [`Node`], which is the union of every shape a child can take
+    /// and has no builder methods — so chaining happens on the builder, and the macro
+    /// supplies the children. Both spellings render the same.
+    #[test]
+    fn chaining_happens_on_the_builder_side() {
+        let chained = div().child(html! { p { "Hi" } }).add_class("card");
+
+        assert_eq!(chained.render(), r#"<div class="card"><p>Hi</p></div>"#);
+    }
+
+    /// Ports `BuilderInitTests.nestingIsArbitrarilyDeep`.
+    #[test]
+    fn nesting_goes_as_deep_as_it_is_written() {
+        let page = html! {
+            body { main_tag { section { article { h2 { "Title" } } } } }
+        };
+
+        assert_eq!(
+            page.render(),
+            "<body><main><section><article><h2>Title</h2></article></section></main></body>"
+        );
+    }
 }

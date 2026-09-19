@@ -381,7 +381,12 @@ fn write_void_suffix(out: &mut String, options: &RenderOptions) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::elements::{code, div, img, p, pre, span};
+    use crate::elements::{
+        body, code, div, h1, head, html_tag, i, img, li, p, pre, span, title, ul,
+    };
+    // `macros` is declared after `core` in lib.rs, so `html!` is not in scope by position;
+    // it is `#[macro_export]`ed, which puts it at the crate root.
+    use crate::html;
 
     #[test]
     fn the_tree_is_send_and_sync() {
@@ -409,7 +414,7 @@ mod tests {
         assert!(rendered.ends_with("-->"));
     }
 
-    /// Ports `FragmentTests.testEmptyFragmentLeavesNoBlankLine`.
+    /// Ports `FragmentTests.testEmptyFragmentDoesNotLeaveBlankLines`.
     #[test]
     fn an_empty_fragment_leaves_no_blank_line() {
         let tree = div()
@@ -422,6 +427,7 @@ mod tests {
         );
     }
 
+    /// Ports `FragmentTests.testFragmentRendersChildrenWithoutWrapper`.
     #[test]
     fn a_fragment_renders_its_children_without_a_wrapper() {
         let tree = Node::fragment([p().text("a").into(), p().text("b").into()]);
@@ -471,5 +477,187 @@ mod tests {
     fn compact_is_the_default_for_an_element() {
         let tree = div().child(p().text("a"));
         assert_eq!(tree.render(), "<div><p>a</p></div>");
+    }
+
+    // Ports the `RawHTML` and fragment half of `HTML14FeaturesTests`; the element half
+    // lives in `crate::elements`.
+
+    /// Ports `HTML14FeaturesTests.testRawHTMLRendersWithoutWrapper`.
+    #[test]
+    fn raw_markup_renders_with_no_wrapper_around_it() {
+        let raw = Node::raw(r#"<span class="x">hi</span>"#);
+
+        assert_eq!(raw.render(), r#"<span class="x">hi</span>"#);
+        assert!(!raw.render().contains("<div"));
+    }
+
+    /// Ports `HTML14FeaturesTests.testRawHTMLAsChildHasNoWrapper`.
+    #[test]
+    fn raw_markup_as_a_child_adds_no_wrapper() {
+        let markup = div()
+            .child(Node::raw(r#"<i class="fa fa-home"></i>"#))
+            .child(span().text("Home"));
+
+        assert_eq!(
+            markup.render(),
+            r#"<div><i class="fa fa-home"></i><span>Home</span></div>"#
+        );
+    }
+
+    /// Ports `HTML14FeaturesTests.testFragmentHelper`.
+    #[test]
+    fn a_fragment_renders_its_children_with_no_wrapper() {
+        let fragment = Node::fragment([
+            i().add_class("fa fa-star").into(),
+            span().text(" Featured").into(),
+        ]);
+
+        assert_eq!(
+            fragment.render(),
+            r#"<i class="fa fa-star"></i><span> Featured</span>"#
+        );
+    }
+
+    /// Ports `HTML14FeaturesTests.testFragmentBuilderBuildArray`.
+    #[test]
+    fn a_fragment_takes_a_mapped_sequence() {
+        let fragment = Node::fragment(
+            ["One", "Two", "Three"].map(|title| div().add_class("card").text(title).into()),
+        );
+
+        assert_eq!(
+            fragment.render(),
+            concat!(
+                r#"<div class="card">One</div><div class="card">Two</div>"#,
+                r#"<div class="card">Three</div>"#,
+            )
+        );
+    }
+
+    // Ports `FragmentTests`. This is the suite that pins the empty-fragment behaviour the
+    // pretty writer exists to preserve, so it is also the independent check on the
+    // iterative rewrite.
+
+    /// Ports `FragmentTests.testEmptyFragmentRendersNothing`.
+    #[test]
+    fn an_empty_fragment_renders_nothing_in_either_mode() {
+        assert!(Node::fragment([]).render().is_empty());
+        assert!(Node::fragment([]).render_pretty().is_empty());
+    }
+
+    /// Ports `FragmentTests.testFragmentKeepsPrettyIndentation`.
+    #[test]
+    fn a_fragments_children_are_indented_as_the_parents_own() {
+        let list = ul().child(Node::fragment([
+            li().text("a").into(),
+            li().text("b").into(),
+        ]));
+
+        assert_eq!(
+            list.render_pretty(),
+            "<ul>\n  <li>a</li>\n  <li>b</li>\n</ul>"
+        );
+    }
+
+    /// Ports `FragmentTests.testFragmentBuilderSupportsMapAndFilter`.
+    #[test]
+    fn a_fragment_takes_a_filtered_and_mapped_sequence() {
+        let names = ["Ana", "Bruno", "Carla"];
+        let group = Node::fragment(
+            names
+                .iter()
+                .filter(|name| name.len() > 3)
+                .map(|name| li().text(name).into()),
+        );
+
+        assert_eq!(group.render(), "<li>Bruno</li><li>Carla</li>");
+    }
+
+    /// Ports `FragmentTests.testFalseConditionDoesNotEmitStrayHTMLNode`.
+    #[test]
+    fn a_false_condition_emits_no_stray_node() {
+        let show_banner = false;
+        let page = html_tag()
+            .child(head().child(title().text("Home")))
+            .child(html! { @if show_banner { div { "banner" } } })
+            .child(body().child(h1().text("Hi")));
+
+        assert_eq!(
+            page.render(),
+            "<html><head><title>Home</title></head><body><h1>Hi</h1></body></html>"
+        );
+    }
+
+    /// Ports `FragmentTests.testTrueConditionEmitsTheBranch`.
+    #[test]
+    fn a_true_condition_emits_its_branch() {
+        let show_banner = true;
+        let page = html_tag().child(html! { @if show_banner { div { "banner" } } });
+
+        assert_eq!(page.render(), "<html><div>banner</div></html>");
+    }
+
+    /// Ports `FragmentTests.testLoopInsideHTMLBuilder`.
+    #[test]
+    fn a_loop_emits_one_node_per_iteration() {
+        let page = html_tag().child(html! {
+            @for index in 1..=3 { p { "line " (index) } }
+        });
+
+        assert_eq!(
+            page.render(),
+            "<html><p>line 1</p><p>line 2</p><p>line 3</p></html>"
+        );
+    }
+
+    /// Ports `FragmentTests.testRawHTMLIsIndentedInsideAPrettyTree`.
+    #[test]
+    fn raw_markup_is_indented_as_one_blob() {
+        let container = div().child(Node::raw("<custom-element></custom-element>"));
+
+        assert_eq!(
+            container.render_pretty(),
+            "<div>\n  <custom-element></custom-element>\n</div>"
+        );
+    }
+
+    /// Ports `FragmentTests.testFragmentBuilderTakesBothBranchesOfAnIf`.
+    #[test]
+    fn a_condition_can_pick_either_branch() {
+        fn badge(is_beta: bool) -> Node {
+            html! { @if is_beta { span { "beta" } } @else { span { "stable" } } }
+        }
+
+        assert_eq!(badge(true).render(), "<span>beta</span>");
+        assert_eq!(badge(false).render(), "<span>stable</span>");
+    }
+
+    /// Ports `FragmentTests.testNestedFragmentsFlattenInPrettyOutput`.
+    ///
+    /// Two levels of nesting with an empty fragment between them: the rollback has to
+    /// survive being nested inside another rollback.
+    #[test]
+    fn nested_fragments_flatten_without_leaving_gaps() {
+        let list = ul().child(Node::fragment([
+            Node::fragment([li().text("a").into()]),
+            Node::fragment([]),
+            li().text("b").into(),
+        ]));
+
+        assert_eq!(
+            list.render_pretty(),
+            "<ul>\n  <li>a</li>\n  <li>b</li>\n</ul>"
+        );
+    }
+
+    /// Ports `FragmentTests.testRawHTMLStillEmitsMarkupVerbatim`.
+    #[test]
+    fn raw_markup_is_emitted_verbatim() {
+        let raw = Node::raw(r#"<custom-element data-x="1"></custom-element>"#);
+
+        assert_eq!(
+            raw.render(),
+            r#"<custom-element data-x="1"></custom-element>"#
+        );
     }
 }
