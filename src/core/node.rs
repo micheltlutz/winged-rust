@@ -381,7 +381,7 @@ fn write_void_suffix(out: &mut String, options: &RenderOptions) {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::elements::{code, div, img, p, pre, span};
+    use crate::elements::{code, div, i, img, p, pre, span};
 
     #[test]
     fn the_tree_is_send_and_sync() {
@@ -471,5 +471,60 @@ mod tests {
     fn compact_is_the_default_for_an_element() {
         let tree = div().child(p().text("a"));
         assert_eq!(tree.render(), "<div><p>a</p></div>");
+    }
+
+    // Ports the `RawHTML` and fragment half of `HTML14FeaturesTests`; the element half
+    // lives in `crate::elements`.
+
+    /// Ports `HTML14FeaturesTests.testRawHTMLRendersWithoutWrapper`.
+    #[test]
+    fn raw_markup_renders_with_no_wrapper_around_it() {
+        let raw = Node::raw(r#"<span class="x">hi</span>"#);
+
+        assert_eq!(raw.render(), r#"<span class="x">hi</span>"#);
+        assert!(!raw.render().contains("<div"));
+    }
+
+    /// Ports `HTML14FeaturesTests.testRawHTMLAsChildHasNoWrapper`.
+    #[test]
+    fn raw_markup_as_a_child_adds_no_wrapper() {
+        let markup = div()
+            .child(Node::raw(r#"<i class="fa fa-home"></i>"#))
+            .child(span().text("Home"));
+
+        assert_eq!(
+            markup.render(),
+            r#"<div><i class="fa fa-home"></i><span>Home</span></div>"#
+        );
+    }
+
+    /// Ports `HTML14FeaturesTests.testFragmentHelper`.
+    #[test]
+    fn a_fragment_renders_its_children_with_no_wrapper() {
+        let fragment = Node::fragment([
+            i().add_class("fa fa-star").into(),
+            span().text(" Featured").into(),
+        ]);
+
+        assert_eq!(
+            fragment.render(),
+            r#"<i class="fa fa-star"></i><span> Featured</span>"#
+        );
+    }
+
+    /// Ports `HTML14FeaturesTests.testFragmentBuilderBuildArray`.
+    #[test]
+    fn a_fragment_takes_a_mapped_sequence() {
+        let fragment = Node::fragment(
+            ["One", "Two", "Three"].map(|title| div().add_class("card").text(title).into()),
+        );
+
+        assert_eq!(
+            fragment.render(),
+            concat!(
+                r#"<div class="card">One</div><div class="card">Two</div>"#,
+                r#"<div class="card">Three</div>"#,
+            )
+        );
     }
 }

@@ -745,4 +745,109 @@ mod tests {
         );
         assert_eq!(output().text("42").render(), "<output>42</output>");
     }
+
+    // Ports the element half of `HTML14FeaturesTests`; the `RawHTML` and fragment half
+    // lives in `crate::core::node`.
+
+    /// Ports `HTML14FeaturesTests.testBooleanAttribute`.
+    #[test]
+    fn boolean_attributes_carry_no_value() {
+        let rendered = input_named("checkbox", "agree")
+            .bool_attr("checked")
+            .bool_attr("required")
+            .render();
+
+        assert_eq!(
+            rendered,
+            r#"<input type="checkbox" name="agree" checked required>"#
+        );
+        assert!(!rendered.contains("checked="));
+        assert!(!rendered.contains("required="));
+    }
+
+    /// Ports `HTML14FeaturesTests.testHTML5SelfClosingDefault`.
+    #[test]
+    fn void_elements_do_not_self_close_by_default() {
+        let rendered = image("a.png", "A").render();
+
+        assert_eq!(rendered, r#"<img src="a.png" alt="A">"#);
+        assert!(!rendered.contains("/>"));
+    }
+
+    /// Ports `HTML14FeaturesTests.testXHTMLSelfClosingOption`.
+    #[test]
+    fn xhtml_mode_self_closes_void_elements() {
+        let options = RenderOptions::compact().with_xhtml_self_closing(true);
+
+        assert_eq!(
+            image("a.png", "A").render_with(&options),
+            r#"<img src="a.png" alt="A" />"#
+        );
+    }
+
+    /// Ports `HTML14FeaturesTests.testIAndAWithChildren`.
+    #[test]
+    fn anchors_and_headings_take_element_children() {
+        assert_eq!(
+            link_to("/news").child(image("thumb.jpg", "Thumb")).render(),
+            r#"<a href="/news"><img src="thumb.jpg" alt="Thumb"></a>"#
+        );
+        assert_eq!(
+            h3().child(link_to("/news").text("Headline")).render(),
+            r#"<h3><a href="/news">Headline</a></h3>"#
+        );
+        assert_eq!(
+            i().add_class("fas fa-search").render(),
+            r#"<i class="fas fa-search"></i>"#
+        );
+    }
+
+    /// Ports `HTML14FeaturesTests.testButtonSubmitType`.
+    #[test]
+    fn a_submit_button_carries_its_type() {
+        assert_eq!(
+            button_typed("submit").text("Send").render(),
+            r#"<button type="submit">Send</button>"#
+        );
+    }
+
+    /// Ports `HTML14FeaturesTests.testLabelWithoutFor`.
+    #[test]
+    fn a_label_without_a_target_has_no_for_attribute() {
+        let rendered = label().text("Accept cookies").render();
+
+        assert_eq!(rendered, "<label>Accept cookies</label>");
+        assert!(!rendered.contains("for="));
+    }
+
+    /// Ports `HTML14FeaturesTests.testInputWithoutName`.
+    #[test]
+    fn an_input_without_a_name_has_no_name_attribute() {
+        let rendered = input()
+            .attr("type", "search")
+            .attr("placeholder", "Search")
+            .render();
+
+        assert_eq!(rendered, r#"<input type="search" placeholder="Search">"#);
+        assert!(!rendered.contains("name="));
+    }
+
+    /// Ports `HTML14FeaturesTests.testSectionWithContent`.
+    #[test]
+    fn a_section_renders_its_class_and_text() {
+        assert_eq!(
+            section().add_class("hero").text("Hello").render(),
+            r#"<section class="hero">Hello</section>"#
+        );
+    }
+
+    /// Ports `HTML14FeaturesTests.testInlineSemanticTags`.
+    #[test]
+    fn the_inline_semantic_tags_render() {
+        assert_eq!(strong().text("bold").render(), "<strong>bold</strong>");
+        assert_eq!(em().text("emph").render(), "<em>emph</em>");
+        assert_eq!(small().text("fine").render(), "<small>fine</small>");
+        assert_eq!(br().render(), "<br>");
+        assert_eq!(hr().render(), "<hr>");
+    }
 }
