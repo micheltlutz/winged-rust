@@ -129,13 +129,14 @@ pub(crate) fn write_escaped_attribute(out: &mut String, input: &str) {
 mod tests {
     use super::*;
 
-    /// Ports `HTMLEscapeTests.testEscapeBasicCharacters`.
+    /// No single Swift counterpart: this covers in one assertion what `testEscapeAmpersand`
+    /// and `testEscapeQuotes` check separately, plus the angle brackets.
     #[test]
     fn escapes_the_five_html_characters() {
         assert_eq!(escape_text("<>&\"'"), "&lt;&gt;&amp;&quot;&#x27;");
     }
 
-    /// Ports `HTMLEscapeTests.testEscapeScriptTag`.
+    /// Ports `HTMLEscapeTests.testEscapeBasicHTML`.
     #[test]
     fn escapes_a_script_payload() {
         assert_eq!(
@@ -150,7 +151,8 @@ mod tests {
         assert_eq!(escape_text("a & b < c"), "a &amp; b &lt; c");
     }
 
-    /// Ports `HTMLEscapeTests.testEscapeSlashesOptIn`.
+    /// Ports `HTMLEscapeTests.testSlashesAreKeptByDefault` and
+    /// `HTMLEscapeTests.testSlashesCanBeEscapedExplicitly`.
     #[test]
     fn slashes_are_only_escaped_on_request() {
         assert_eq!(escape_text("2026/09/16"), "2026/09/16");
@@ -160,7 +162,7 @@ mod tests {
         );
     }
 
-    /// Ports `HTMLEscapeTests.testEscapeAttribute`. Attribute context leaves `<` and `>`
+    /// Ports `HTMLEscapeTests.testAttributeEscape`. Attribute context leaves `<` and `>`
     /// alone — they cannot terminate a quoted value.
     #[test]
     fn attribute_escaping_leaves_angle_brackets_alone() {
@@ -204,5 +206,20 @@ mod tests {
         assert_eq!(escape_text(""), "");
         assert_eq!(escape_attribute(""), "");
         assert_eq!(escape_xml(""), "");
+    }
+
+    /// Ports `HTMLEscapeTests.testEscapeAmpersand`.
+    #[test]
+    fn an_ampersand_becomes_an_entity() {
+        assert_eq!(escape_text("Tom & Jerry"), "Tom &amp; Jerry");
+    }
+
+    /// Ports `HTMLEscapeTests.testEscapeQuotes`.
+    #[test]
+    fn double_quotes_become_entities() {
+        assert_eq!(
+            escape_text(r#"He said "Hello""#),
+            "He said &quot;Hello&quot;"
+        );
     }
 }

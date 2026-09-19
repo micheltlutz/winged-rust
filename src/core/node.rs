@@ -400,7 +400,9 @@ mod tests {
         assert_eq!(Node::text("a & b").render(), "a &amp; b");
     }
 
-    /// Ports `HTMLEscapeTests.testRawHTMLIsNotEscaped`.
+    /// No direct Swift counterpart: Winged-Swift turns escaping off per tag with
+    /// `escapeContent:`, which `Element::raw_text` ports. This is the node-level version,
+    /// which has no equivalent because Swift models raw markup as an `HTMLTag` subclass.
     #[test]
     fn raw_nodes_are_never_escaped() {
         assert_eq!(Node::raw("<b>bold</b>").render(), "<b>bold</b>");
