@@ -16,6 +16,8 @@ fn wide_tree(count: usize) -> Element {
     ul().children_from((0..count).map(|i| li().add_class("item").text(format!("Item {i}"))))
 }
 
+/// Ports `RenderPerformanceTests.outputSizeIsWhatWeExpect`, which is the whole of Swift's
+/// performance suite that can be asserted deterministically.
 #[test]
 fn compact_output_size_is_stable() {
     let rendered = wide_tree(1_000).render();

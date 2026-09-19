@@ -7,7 +7,20 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **The Winged-Swift test suite is fully ported.** All 183 non-skipped cases across 23
+  suites now have a Rust counterpart, each naming the Swift case it came from, and
+  `scripts/check-swift-parity.sh` checks those names against the Swift source rather than
+  trusting them. It is step 7 of `scripts/verify.sh`, and skips itself when the sibling
+  checkout is absent. ([#30](https://github.com/micheltlutz/winged-rust/issues/30))
+
 ### Fixed
+
+- `seo::common` emitted `<meta name="keywords" content="">` when given an empty list, where
+  Winged-Swift omits the tag. `SeoBuilder` already guarded against it, so the empty tag was
+  only reachable by calling `common` directly — the guard now lives in `common`, where both
+  entry points get it. Found by porting `SEOTests.testCommonOmitsEmptyKeywords`.
 
 - **Rendering no longer recurses**, so nesting depth is no longer bounded by the stack.
   The writer walks an explicit work stack, and `Element` tears its subtree down the same

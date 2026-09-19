@@ -216,7 +216,7 @@ fn collect_failures(results: Vec<(String, io::Result<()>)>) -> io::Result<()> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::elements::{h1, title};
+    use crate::elements::{body, h1, head, html_tag, title};
 
     /// A throwaway directory that removes itself. Avoids a dev-dependency for six tests.
     struct TempDir(PathBuf);
@@ -242,7 +242,7 @@ mod tests {
             .body_children([h1().text(text)])
     }
 
-    /// Ports `StaticSiteGeneratorTests.testGenerateWritesFile`.
+    /// Ports `StaticSiteGeneratorTests.generateWritesADocument`.
     #[test]
     fn generate_writes_a_rendered_document() {
         let dir = TempDir::new("generate");
@@ -255,7 +255,7 @@ mod tests {
         assert!(written.contains("<h1>Home</h1>"));
     }
 
-    /// Ports `StaticSiteGeneratorTests.testNestedDirectories`.
+    /// Ports `StaticSiteGeneratorTests.generateCreatesNestedDirectories`.
     #[test]
     fn nested_paths_create_their_parent_directories() {
         let dir = TempDir::new("nested");
@@ -269,7 +269,7 @@ mod tests {
         assert!(dir.0.join("blog/2026/post.html").exists());
     }
 
-    /// Ports `StaticSiteGeneratorTests.testDoctypeToggle`.
+    /// Ports `StaticSiteGeneratorTests.generateCanSkipDoctype`.
     #[test]
     fn a_bare_page_can_be_written_without_a_doctype() {
         let dir = TempDir::new("doctype");
@@ -293,7 +293,7 @@ mod tests {
         );
     }
 
-    /// Ports `StaticSiteGeneratorTests.testCopyAsset`.
+    /// Ports `StaticSiteGeneratorTests.writeFileAndCopyAsset`.
     #[test]
     fn copy_asset_replaces_an_existing_destination() {
         let dir = TempDir::new("assets");
@@ -309,7 +309,7 @@ mod tests {
         assert_eq!(copied, "body{color:red}");
     }
 
-    /// Ports `StaticSiteGeneratorTests.testClean`.
+    /// Ports `StaticSiteGeneratorTests.cleanRemovesPreviousOutput`.
     #[test]
     fn clean_empties_the_output_directory() {
         let dir = TempDir::new("clean");
@@ -342,7 +342,7 @@ mod tests {
         assert!(site.write_file("x", "/etc/escaped.html").is_err());
     }
 
-    /// Ports `StaticSiteGeneratorTests.testGenerateMultiple`.
+    /// Ports `StaticSiteGeneratorTests.generateMultipleWritesEveryPage`.
     #[test]
     fn generate_multiple_writes_every_page() {
         let dir = TempDir::new("multiple");
@@ -374,5 +374,50 @@ mod tests {
         let message = error.to_string();
         assert!(message.contains("../one.html"), "{message}");
         assert!(message.contains("../two.html"), "{message}");
+    }
+
+    /// Ports `StaticSiteGeneratorTests.generateWritesDoctypeAndMarkup`.
+    #[test]
+    fn a_page_is_written_with_its_doctype() {
+        let directory = TempDir::new("doctype-and-markup");
+        let site = StaticSiteGenerator::new(&directory.0);
+
+        let page = Node::from(
+            html_tag()
+                .child(head().child(title().text("Home")))
+                .child(body().child(h1().text("Hello"))),
+        );
+        site.generate_page(&page, "index.html", &RenderOptions::pretty(), true)
+            .expect("write");
+
+        let written = fs::read_to_string(directory.0.join("index.html")).expect("read");
+        assert!(written.starts_with("<!DOCTYPE html>\n"));
+        assert!(written.contains("<title>Home</title>"));
+        assert!(written.contains("<h1>Hello</h1>"));
+    }
+
+    /// Ports `StaticSiteGeneratorTests.generateMultipleDocuments`.
+    #[test]
+    fn generate_multiple_writes_each_document_to_its_own_path() {
+        let directory = TempDir::new("multiple-documents");
+        let site = StaticSiteGenerator::new(&directory.0);
+
+        let pages = vec![
+            (page("Home"), "index.html".to_string()),
+            (page("About"), "about/index.html".to_string()),
+        ];
+        site.generate_multiple(&pages, &RenderOptions::compact())
+            .expect("write");
+
+        assert!(
+            fs::read_to_string(directory.0.join("index.html"))
+                .expect("read")
+                .contains("<h1>Home</h1>")
+        );
+        assert!(
+            fs::read_to_string(directory.0.join("about/index.html"))
+                .expect("read")
+                .contains("<h1>About</h1>")
+        );
     }
 }

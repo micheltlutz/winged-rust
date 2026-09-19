@@ -191,11 +191,13 @@ fn marketing_body() -> Vec<Element> {
     ]
 }
 
+/// Ports `GoldenFileTests.prettyDocumentMatchesFixture`.
 #[test]
 fn marketing_page_matches_the_pretty_fixture() {
     assert_matches_fixture("marketing-pretty.html", &marketing_page().render());
 }
 
+/// Ports `GoldenFileTests.compactDocumentMatchesFixture`.
 #[test]
 fn marketing_page_matches_the_compact_fixture() {
     assert_matches_fixture("marketing-compact.html", &marketing_page().render_compact());
@@ -221,6 +223,7 @@ fn the_two_render_modes_agree_on_content() {
 }
 
 /// The sitemap from `Winged-Swift/Tests/WingedSwiftTests/GoldenFileTests.swift`.
+/// Ports `GoldenFileTests.feedsMatchFixtures`.
 #[test]
 fn sitemap_matches_the_fixture() {
     use winged_rust::sitemap::{SitemapGenerator, SitemapUrl};
@@ -239,6 +242,8 @@ fn sitemap_matches_the_fixture() {
 }
 
 /// The feed from `Winged-Swift/Tests/WingedSwiftTests/GoldenFileTests.swift`.
+/// Ports `GoldenFileTests.feedsMatchFixtures`, which checks the RSS and sitemap fixtures
+/// together; they are one test each here.
 #[test]
 fn feed_matches_the_fixture() {
     use winged_rust::feed::{RssGenerator, RssItem};

@@ -552,4 +552,87 @@ mod tests {
             "<body><main><section><article><h2>Title</h2></article></section></main></body>"
         );
     }
+
+    // Ports `HTMLBuilderTests`, which exercises Swift's result-builder plumbing:
+    // `buildOptional`, `buildEither` and `buildExpression`. Those are compiler hooks with
+    // no counterpart here — `html!` lowers `@if`/`@else`/`@for` straight onto the builder —
+    // so each port keeps the *behaviour* the Swift test describes. Several of those tests
+    // reach into `document.children[0].name`; these assert markup instead, which is rule 11
+    // of AGENTS.md and the reason Winged-Swift's own suite survived its 2.0 rewrite.
+
+    /// Ports `HTMLBuilderTests.testHTMLBuilderCreatesRootHTMLTag`.
+    #[test]
+    fn a_root_html_element_keeps_its_children_in_order() {
+        let document = html_tag().child(body()).child(head());
+
+        assert_eq!(document.render(), "<html><body></body><head></head></html>");
+    }
+
+    /// Ports `HTMLBuilderTests.testHTMLBuilderHandlesOptional`.
+    ///
+    /// `Option` is an iterator of zero or one item, so `children_from` is all the plumbing
+    /// an optional child needs.
+    #[test]
+    fn an_optional_child_is_included_when_present() {
+        let present: Option<Element> = Some(Element::new("optional"));
+        let absent: Option<Element> = None;
+
+        assert_eq!(
+            html_tag().children_from(present).render(),
+            "<html><optional></optional></html>"
+        );
+        assert_eq!(html_tag().children_from(absent).render(), "<html></html>");
+    }
+
+    /// Ports `HTMLBuilderTests.testHTMLBuilderWrapsASingleNonGroupedComponent`.
+    #[test]
+    fn a_single_child_gains_no_wrapper() {
+        let document = html_tag().child(body().child(h1().text("Hi")));
+
+        assert_eq!(document.render(), "<html><body><h1>Hi</h1></body></html>");
+    }
+
+    /// Ports `HTMLBuilderTests.testHTMLBuilderTakesBothBranchesOfAnIfElse`.
+    #[test]
+    fn an_if_else_renders_whichever_branch_holds() {
+        fn page(logged_in: bool) -> Element {
+            html_tag().child(html! {
+                @if logged_in { nav { "Sign out" } } @else { nav { "Sign in" } }
+            })
+        }
+
+        assert_eq!(page(true).render(), "<html><nav>Sign out</nav></html>");
+        assert_eq!(page(false).render(), "<html><nav>Sign in</nav></html>");
+    }
+
+    /// Ports `HTMLBuilderTests.testHTMLBuilderAcceptsAnArrayExpression`.
+    #[test]
+    fn a_sequence_of_children_flattens_into_siblings() {
+        let document = html_tag().children_from(["a", "b"].map(|text| p().text(text)));
+
+        assert_eq!(document.render(), "<html><p>a</p><p>b</p></html>");
+    }
+
+    /// Ports `HTMLBuilderTests.testHTMLBuilderHandlesEitherFirst`.
+    ///
+    /// Swift names the branches with the untyped `HTMLTag("first")`; the macro resolves a
+    /// tag name to its generated constructor, so real tags stand in.
+    #[test]
+    fn the_first_branch_of_a_condition_renders_alone() {
+        let document = html_tag().child(html! {
+            @if true { header } @else { footer }
+        });
+
+        assert_eq!(document.render(), "<html><header></header></html>");
+    }
+
+    /// Ports `HTMLBuilderTests.testHTMLBuilderHandlesEitherSecond`.
+    #[test]
+    fn the_second_branch_of_a_condition_renders_alone() {
+        let document = html_tag().child(html! {
+            @if false { header } @else { footer }
+        });
+
+        assert_eq!(document.render(), "<html><footer></footer></html>");
+    }
 }

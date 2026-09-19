@@ -265,11 +265,11 @@ impl Drop for Element {
 mod tests {
     use super::*;
     use crate::elements::{
-        a, body, button, div, footer, head, header, html_tag, img, li, main_tag, meta, nav, ol, p,
-        script, span, stylesheet, table, td, th, title, tr, ul,
+        a, body, button, div, footer, head, header, html_tag, img, input_named, li, main_tag, meta,
+        nav, ol, p, script, span, stylesheet, table, td, th, title, tr, ul,
     };
 
-    /// Ports `CSSHelpersTests.testAddClassAppends`.
+    /// Ports `CSSHelpersTests.testAddMultipleClasses`.
     #[test]
     fn add_class_appends_to_one_attribute() {
         assert_eq!(
@@ -278,7 +278,7 @@ mod tests {
         );
     }
 
-    /// Ports `CSSHelpersTests.testAddClassDoesNotDoubleEscape`.
+    /// Ports `CSSHelpersTests.testAddClassDoesNotDoubleEscapeExistingValues`.
     #[test]
     fn chaining_add_class_does_not_double_escape() {
         let rendered = div().add_class("a&b").add_class("c").render();
@@ -286,7 +286,7 @@ mod tests {
         assert!(!rendered.contains("&amp;amp;"));
     }
 
-    /// Ports `CSSHelpersTests.testAddClassCannotInjectAnAttribute`.
+    /// Ports `CSSHelpersTests.testAddClassEscapesQuotesInsteadOfBreakingOutOfTheAttribute`.
     #[test]
     fn a_quote_in_a_class_name_cannot_break_out() {
         let rendered = div().add_class(r#"a" onload="alert(1)"#).render();
@@ -294,6 +294,7 @@ mod tests {
         assert!(rendered.contains("&quot;"));
     }
 
+    /// Ports `CSSHelpersTests.testAddClassesArray`.
     #[test]
     fn add_classes_appends_all_of_them_in_order() {
         assert_eq!(
@@ -302,13 +303,14 @@ mod tests {
         );
     }
 
-    /// Ports `CSSHelpersTests.testSetIdReplaces`.
+    /// Ports `CSSHelpersTests.testSetIdReplacesExisting`.
     #[test]
     fn set_id_replaces_rather_than_appending() {
         let rendered = div().set_id("first").set_id("second").render();
         assert_eq!(rendered, r#"<div id="second"></div>"#);
     }
 
+    /// Ports `CSSHelpersTests.testSetStyle` and `AttributeHelpersTests.testSetRole`.
     #[test]
     fn set_style_and_set_role_also_replace() {
         let rendered = div()
@@ -319,7 +321,8 @@ mod tests {
         assert_eq!(rendered, r#"<div style="color:blue" role="main"></div>"#);
     }
 
-    /// Ports `AttributeHelpersTests.testDataAttribute` and `testAriaAttribute`.
+    /// Ports `AttributeHelpersTests.testDataAttribute` and
+    /// `AttributeHelpersTests.testAriaAttribute`.
     #[test]
     fn data_and_aria_attributes_get_their_prefixes() {
         let rendered = span()
@@ -343,7 +346,8 @@ mod tests {
         }
     }
 
-    /// Ports `HTMLTagTests.testAttributesAreNotDeduplicated`.
+    /// No Swift counterpart: `HTMLTag` has no deduplication either, but nothing in its
+    /// suite pins it. Kept as a Rust-side guarantee.
     #[test]
     fn plain_attributes_are_appended_without_deduplication() {
         assert_eq!(
@@ -352,6 +356,11 @@ mod tests {
         );
     }
 
+    /// Ports `HTMLEscapeTests.testHTMLTagEscapesContentByDefault` and
+    /// `HTMLEscapeTests.testHTMLTagCanDisableEscape`. Swift turns escaping off with an
+    /// `escapeContent:`
+    /// flag on the initialiser; Rust has a separate method instead, so the escape hatch is
+    /// greppable rather than hidden behind a default argument.
     #[test]
     fn text_is_escaped_and_raw_text_is_not() {
         assert_eq!(p().text("<b>").render(), "<p>&lt;b&gt;</p>");
@@ -661,6 +670,114 @@ mod tests {
                 r#"<html><button class="button-class" type="button">"#,
                 r#"<span class="icon-bar"></span></button></html>"#,
             )
+        );
+    }
+
+    // Ports the rest of `CSSHelpersTests` and `AttributeHelpersTests`.
+
+    /// Ports `CSSHelpersTests.testChainingPreservesTheConcreteType`.
+    ///
+    /// Swift needs the test because its helpers are declared on a protocol and could erase
+    /// the tag type. Rust's take `self` and return `Self`, so the type survives by
+    /// construction — what is worth pinning is the attribute order the chain produces.
+    #[test]
+    fn chaining_helpers_keeps_the_element_usable() {
+        let card: Element = div().add_class("card").set_id("hero").set_role("region");
+
+        assert_eq!(
+            card.render(),
+            r#"<div class="card" id="hero" role="region"></div>"#
+        );
+    }
+
+    /// Ports `CSSHelpersTests.testSetStyleEscapesQuotes`.
+    #[test]
+    fn set_style_escapes_quotes() {
+        let rendered = div()
+            .set_style(r#"font-family: "Inter", sans-serif"#)
+            .render();
+
+        assert_eq!(
+            rendered,
+            r#"<div style="font-family: &quot;Inter&quot;, sans-serif"></div>"#
+        );
+    }
+
+    /// Ports `CSSHelpersTests.testAddSingleClass`.
+    #[test]
+    fn a_single_class_renders_on_its_own() {
+        assert_eq!(
+            div().add_class("container").render(),
+            r#"<div class="container"></div>"#
+        );
+    }
+
+    /// Ports `CSSHelpersTests.testSetId`.
+    #[test]
+    fn set_id_renders_an_id_attribute() {
+        assert_eq!(
+            div().set_id("main-content").render(),
+            r#"<div id="main-content"></div>"#
+        );
+    }
+
+    /// Ports `CSSHelpersTests.testChainedHelpers`.
+    #[test]
+    fn the_helpers_chain_in_the_order_they_are_called() {
+        let rendered = div()
+            .set_id("content")
+            .add_class("container")
+            .add_class("active")
+            .set_style("padding: 20px;")
+            .render();
+
+        assert_eq!(
+            rendered,
+            r#"<div id="content" class="container active" style="padding: 20px;"></div>"#
+        );
+    }
+
+    /// Ports `AttributeHelpersTests.testMultipleDataAttributes`.
+    ///
+    /// Swift passes a `Dictionary`, whose order is unspecified, so its test can only check
+    /// that both survive. `data_attrs` takes an ordered iterator precisely so the output is
+    /// deterministic, which is what this pins instead.
+    #[test]
+    fn several_data_attributes_keep_the_order_they_are_given() {
+        let rendered = div()
+            .data_attrs([("id", "123"), ("type", "product")])
+            .render();
+
+        assert_eq!(rendered, r#"<div data-id="123" data-type="product"></div>"#);
+    }
+
+    /// Ports `AttributeHelpersTests.testMultipleAriaAttributes`.
+    #[test]
+    fn several_aria_attributes_keep_the_order_they_are_given() {
+        let rendered = nav()
+            .aria_attrs([("label", "Main navigation"), ("expanded", "true")])
+            .render();
+
+        assert_eq!(
+            rendered,
+            r#"<nav aria-label="Main navigation" aria-expanded="true"></nav>"#
+        );
+    }
+
+    /// Ports `AttributeHelpersTests.testSetAttribute`.
+    ///
+    /// Swift's `setAttribute` appends like every other helper — the name says *set* but it
+    /// does not replace. `attr` is the same operation under an honest name.
+    #[test]
+    fn attr_appends_arbitrary_attributes() {
+        let rendered = input_named("text", "email")
+            .attr("placeholder", "Enter email")
+            .attr("required", "true")
+            .render();
+
+        assert_eq!(
+            rendered,
+            r#"<input type="text" name="email" placeholder="Enter email" required="true">"#
         );
     }
 }

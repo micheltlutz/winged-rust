@@ -112,7 +112,7 @@ mod tests {
     use super::*;
     use crate::elements::{h1, title};
 
-    /// Ports `DocumentTests.testDoctypeAndLang`.
+    /// Ports `DocumentTests.rendersDoctypeAndLanguage`.
     #[test]
     fn a_document_owns_the_doctype_and_the_lang_attribute() {
         let page = Document::new(Some("pt-BR"));
@@ -122,14 +122,14 @@ mod tests {
         );
     }
 
-    /// Ports `DocumentTests.testOptionalLang`.
+    /// Ports `DocumentTests.languageIsOptional`.
     #[test]
     fn the_lang_attribute_is_omitted_when_absent() {
         let page = Document::new(None);
         assert!(page.render().starts_with("<!DOCTYPE html>\n<html>"));
     }
 
-    /// Ports `DocumentTests.testRootHasNoDoctype`.
+    /// Ports `DocumentTests.rootExposesTheHTMLElementWithoutTheDoctype`.
     #[test]
     fn root_returns_the_tree_without_the_doctype() {
         let page = Document::new(Some("en"));
@@ -137,7 +137,7 @@ mod tests {
         assert!(page.root().render().starts_with("<html lang=\"en\">"));
     }
 
-    /// Ports `DocumentTests.testPrettyIsTheDefault`. The asymmetry with `Element::render`
+    /// Ports `DocumentTests.prettyIsTheDefaultForDocuments`. The asymmetry with `Element::render`
     /// is deliberate — see the type docs.
     #[test]
     fn a_document_renders_pretty_by_default_unlike_an_element() {
@@ -151,6 +151,7 @@ mod tests {
         );
     }
 
+    /// Ports `DocumentTests.acceptsAnExistingHeadAndBody`.
     #[test]
     fn head_and_body_children_land_in_the_right_place() {
         let page = Document::new(Some("en"))
@@ -162,6 +163,7 @@ mod tests {
         assert!(head_at < body_at);
     }
 
+    /// Ports `DocumentTests.documentIsAValue`.
     #[test]
     fn a_document_is_a_value_and_can_be_shared_across_threads() {
         fn assert_send_sync<T: Send + Sync>() {}
@@ -171,5 +173,21 @@ mod tests {
         let copy = page.clone().head_children([title().text("changed")]);
         assert!(!page.render().contains("changed"));
         assert!(copy.render().contains("changed"));
+    }
+
+    /// Ports `DocumentTests.buildersSupportLoopsAndConditions`.
+    #[test]
+    fn body_children_accept_loops_and_conditions() {
+        let show_banner = false;
+        let page = Document::new(None)
+            .head_children([title().text("T")])
+            .body_children([crate::html! {
+                @if show_banner { div { "banner" } }
+                @for index in 1..=2 { p { "line " (index) } }
+            }]);
+
+        let rendered = page.render_compact();
+        assert!(!rendered.contains("banner"));
+        assert!(rendered.contains("<p>line 1</p><p>line 2</p>"));
     }
 }
