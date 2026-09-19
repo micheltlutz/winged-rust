@@ -75,6 +75,14 @@ impl RenderOptions {
 
     /// Appends `depth` levels of indentation to a buffer.
     pub(crate) fn write_indent(&self, out: &mut String, depth: usize) {
+        // The early return is not just a micro-optimisation: with an empty indent the loop
+        // below still runs once per level, which is quadratic in depth and costs minutes on
+        // a deeply nested tree while producing nothing.
+        if depth == 0 || self.indent.is_empty() {
+            return;
+        }
+
+        out.reserve(self.indent.len() * depth);
         for _ in 0..depth {
             out.push_str(&self.indent);
         }
@@ -85,16 +93,15 @@ impl RenderOptions {
 ///
 /// Implement [`write_into`](Render::write_into); the rest comes free.
 ///
-/// # Depth limit
+/// # Depth
 ///
-/// The provided implementations recurse once per nesting level, so **256 levels is the
-/// guaranteed depth** — deeper than browsers themselves render. Around 2,000 levels
-/// exhausts a 2 MiB stack and aborts the process; a stack overflow is not a catchable
-/// panic.
+/// The provided implementations walk an explicit work stack rather than recursing, so
+/// nesting depth costs heap rather than stack and there is no depth at which rendering
+/// aborts. A 100,000-level tree is covered by a test.
 ///
-/// This is only reachable when nesting depth can be influenced by untrusted input. If it
-/// can, bound the depth before building the tree, or render on a thread created with an
-/// explicit [`stack_size`](std::thread::Builder::stack_size). See `SECURITY.md`.
+/// Pretty mode still writes one indent string per level on every line, which makes its
+/// *output* quadratic in depth. That is a size to be aware of when depth comes from
+/// untrusted input — see `SECURITY.md` — not a limit on what renders.
 pub trait Render {
     /// Writes this node and its subtree into an existing buffer.
     ///

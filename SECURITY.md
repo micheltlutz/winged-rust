@@ -32,30 +32,31 @@ These are vulnerabilities:
 - `StaticSiteGenerator` writing outside its output directory, or `clean()` deleting outside
   it.
 
-### Known limitation: rendering depth is bounded by the stack
+### Rendering depth is no longer bounded by the stack
 
-The renderer recurses once per nesting level, so a sufficiently deep tree exhausts the
-stack. A stack overflow is a process **abort**, not a catchable panic — `catch_unwind` will
-not save you.
+The writer walks an explicit work stack instead of recursing, and `Element` tears its
+subtree down the same way, so nesting depth costs heap — bounded by a tree that already
+fits in memory — rather than stack. A 100,000-level tree renders and is freed in the test
+suite, in both render modes.
 
-**Guaranteed depth: 256 levels**, covered by a test. That is already deeper than browsers
-themselves render — Chrome and Firefox both flatten nesting beyond roughly 512 elements. In
-practice around 2,000 levels aborts on a 2 MiB thread stack; more is fine on a main
-thread's 8 MiB.
+Before this, a deep enough tree exhausted the stack, and a stack overflow is a process
+**abort**, not a catchable panic — `catch_unwind` would not have saved you. That made
+nesting depth a denial-of-service vector anywhere it could be influenced by untrusted
+input. Fixed in [#33](https://github.com/micheltlutz/winged-rust/issues/33); Winged-Swift
+still has the recursive shape.
 
-This matters **only if nesting depth can be influenced by untrusted input** — a
-user-supplied document tree, a recursive template, a converter fed arbitrary markup. If
-that describes your use:
+**What deep trees still cost is output size.** Pretty mode writes one indent string per
+level on every line, so output grows with the square of the depth: a 100,000-level tree
+pretty-prints to tens of gigabytes. If depth comes from untrusted input, bound it, or
+render compact, or set an empty indent with
+`RenderOptions::pretty().with_indent("")`.
 
-- Bound the depth yourself before building the tree, or
-- Render on a thread with a large explicit stack (`std::thread::Builder::stack_size`), or
-- Do not accept untrusted structure.
-
-If your tree shape is fixed by your own code — the usual case for a static site generator —
-this cannot be triggered.
-
-Tracked in [#33](https://github.com/micheltlutz/winged-rust/issues/33). Winged-Swift has the
-same shape and the same exposure; this is inherited, not introduced.
+One residual, and it is not a stack limit on rendering: a bare `Node::Fragment` chain with
+no element anywhere in it is still freed recursively. Giving `Node` its own `Drop` would
+forbid `match node { Node::Element(element) => element }` — a partial move this crate's own
+`static_site` example performs — so the iterative teardown lives on `Element`. Every
+fragment reachable through an element, which is every fragment in a document, is freed
+iteratively.
 
 These are **not** vulnerabilities, because they are documented behaviour:
 

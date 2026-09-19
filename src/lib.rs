@@ -36,9 +36,10 @@
 //!
 //! # Limits
 //!
-//! Rendering recurses once per nesting level, so 256 levels of nesting is the guaranteed
-//! depth. See [`Render`] and `SECURITY.md` — it is only reachable when tree depth can be
-//! influenced by untrusted input.
+//! Rendering has no depth limit: the writer walks an explicit stack instead of recursing.
+//! What deep trees do cost is output size in pretty mode, which is quadratic in depth
+//! because every line carries one indent string per level. See [`Render`] and
+//! `SECURITY.md`.
 //!
 //! # Parity
 //!
