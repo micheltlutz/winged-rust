@@ -75,7 +75,7 @@ problem. `Node` is a value type, so bulk generation parallelises safely — that
 
 ```toml
 [dependencies]
-winged-rust = "0.1"
+winged-rust = "1.0"
 ```
 
 Features:

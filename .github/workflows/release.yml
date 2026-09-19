@@ -49,14 +49,21 @@ jobs:
             exit 1
           fi
 
-      # Slices the matching CHANGELOG section, the way Winged-Swift's release workflow does.
+      # Slices the matching CHANGELOG section. The sed range this replaces terminated on the
+      # *next* `## [` heading, so when the section was the last one in the file — which is
+      # exactly the shape of a first release — the range ran to EOF and `sed '$d'` ate a
+      # real line of the notes. awk stops at the next heading or at EOF, either way whole.
       - name: Extract the changelog section
         id: changelog
         run: |
           VERSION="${{ steps.version.outputs.version }}"
           {
             echo "body<<CHANGELOG_EOF"
-            sed -n "/^## \[$VERSION\]/,/^## \[/p" CHANGELOG.md | sed '$d'
+            awk -v version="$VERSION" '
+              index($0, "## [" version "]") == 1 { inside = 1; next }
+              inside && /^## \[/ { exit }
+              inside { print }
+            ' CHANGELOG.md
             echo "CHANGELOG_EOF"
           } >> "$GITHUB_OUTPUT"
 
