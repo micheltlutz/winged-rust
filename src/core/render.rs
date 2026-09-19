@@ -133,7 +133,9 @@ pub trait Render {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::elements::{div, img, p};
 
+    /// Ports `RenderOptionsTests.compactIsTheDefault`.
     #[test]
     fn compact_is_the_default() {
         let options = RenderOptions::default();
@@ -142,7 +144,7 @@ mod tests {
         assert!(!options.xhtml_self_closing);
     }
 
-    /// Ports `RenderOptionsTests.testCustomIndent`.
+    /// Ports `RenderOptionsTests.indentIsConfigurable`.
     #[test]
     fn the_indent_string_is_configurable() {
         let options = RenderOptions::pretty().with_indent("    ");
@@ -151,7 +153,7 @@ mod tests {
         assert_eq!(out, "        ");
     }
 
-    /// Ports `RenderOptionsTests.testValueSemantics`. Options are a value: changing a
+    /// Ports `RenderOptionsTests.optionsAreValues`. Options are a value: changing a
     /// copy must not affect the original.
     #[test]
     fn options_have_value_semantics() {
@@ -159,5 +161,74 @@ mod tests {
         let derived = base.clone().with_xhtml_self_closing(true);
         assert!(!base.xhtml_self_closing);
         assert!(derived.xhtml_self_closing);
+    }
+
+    /// Ports `RenderOptionsTests.prettyIndentsChildren`.
+    #[test]
+    fn pretty_indents_children_by_two_spaces() {
+        let tree = div().child(p().text("Hi"));
+
+        assert_eq!(tree.render_pretty(), "<div>\n  <p>Hi</p>\n</div>");
+    }
+
+    /// Ports `RenderOptionsTests.xhtmlSelfClosingIsPerCall`.
+    ///
+    /// Winged-Swift used to carry this on a process-wide `HTMLTag.xhtmlSelfClosing` switch
+    /// and is removing it. Here it was never anything but a field on the options value, so
+    /// a render cannot leak into the next one.
+    #[test]
+    fn xhtml_self_closing_is_per_call() {
+        let tag = img().attr("src", "a.png");
+
+        assert_eq!(tag.render(), r#"<img src="a.png">"#);
+        assert_eq!(
+            tag.render_with(&RenderOptions::compact().with_xhtml_self_closing(true)),
+            r#"<img src="a.png" />"#
+        );
+        assert_eq!(tag.render(), r#"<img src="a.png">"#);
+    }
+
+    /// Ports `RenderOptionsTests.writeAppendsToAnExistingBuffer`.
+    #[test]
+    fn write_into_appends_rather_than_replacing() {
+        let mut buffer = String::from("<!-- header -->");
+        div()
+            .text("x")
+            .write_into(&mut buffer, &RenderOptions::compact(), 0);
+
+        assert_eq!(buffer, "<!-- header --><div>x</div>");
+    }
+
+    /// Ports `RenderOptionsTests.concurrentRendersDoNotShareState`.
+    ///
+    /// The Swift suite needs this because its tree is reference-typed and its options used
+    /// to be global. Here the tree is `Send + Sync` and the options are a value, so the
+    /// test is a guard against ever reintroducing shared state.
+    #[test]
+    fn concurrent_renders_do_not_share_state() {
+        let results: Vec<(usize, String)> = std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..8)
+                .map(|index| {
+                    scope.spawn(move || {
+                        let tag = img().attr("src", format!("{index}.png"));
+                        let options =
+                            RenderOptions::compact().with_xhtml_self_closing(index % 2 == 0);
+                        (index, tag.render_with(&options))
+                    })
+                })
+                .collect();
+            handles
+                .into_iter()
+                .map(|h| h.join().expect("thread"))
+                .collect()
+        });
+
+        for (index, rendered) in results {
+            assert_eq!(
+                rendered.ends_with(" />"),
+                index % 2 == 0,
+                "{index} rendered {rendered:?}"
+            );
+        }
     }
 }

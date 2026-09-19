@@ -65,7 +65,7 @@ mod tests {
         }
     }
 
-    /// Ports `LayoutTests.testRenderContent`.
+    /// Ports `LayoutTests.wrapsASingleTag`.
     #[test]
     fn a_layout_wraps_a_single_node() {
         let page = Minimal.render(p().text("body").into());
@@ -75,7 +75,7 @@ mod tests {
         );
     }
 
-    /// Ports `LayoutTests.testRenderContents`.
+    /// Ports `LayoutTests.wrapsSeveralTagsInAContainer`.
     #[test]
     fn render_many_groups_the_contents_in_a_div() {
         let page = Minimal.render_many(vec![p().text("a").into(), p().text("b").into()]);
@@ -85,6 +85,7 @@ mod tests {
         );
     }
 
+    /// Ports `LayoutTests.anEmptyContentListStillProducesAPage`.
     #[test]
     fn render_many_with_no_contents_still_produces_the_wrapper() {
         let page = Minimal.render_many(vec![]);
