@@ -36,7 +36,7 @@ wasm-bindgen-test = "0.3"
 # criterion pulls rayon, which refuses to compile for wasm32 ("Rayon cannot be used when
 # targeting wasi32"). Keeping it off the wasm target is what lets `wasm-pack test` build.
 [target.'cfg(not(target_arch = "wasm32"))'.dev-dependencies]
-criterion = "0.5"
+criterion = "0.7"
 
 [[bench]]
 name = "render"
