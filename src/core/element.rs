@@ -236,7 +236,28 @@ impl Element {
 
 impl Render for Element {
     fn write_into(&self, out: &mut String, options: &RenderOptions, depth: usize) {
-        Node::Element(self.clone()).write_into(out, options, depth);
+        crate::core::node::write_element_tree(self, out, options, depth);
+    }
+}
+
+/// Tears the subtree down iteratively.
+///
+/// The derived drop glue recurses once per nesting level, so a tree deep enough to need
+/// the iterative writer would abort while being *freed* instead — after rendering fine.
+/// Draining into an explicit worklist keeps teardown flat.
+///
+/// Each node has its children moved out before it goes out of scope, so the `Drop` that
+/// runs for it finds nothing left to recurse into.
+impl Drop for Element {
+    fn drop(&mut self) {
+        let mut pending = core::mem::take(&mut self.children);
+        while let Some(node) = pending.pop() {
+            match node {
+                Node::Element(mut element) => pending.append(&mut element.children),
+                Node::Fragment(mut children) => pending.append(&mut children),
+                Node::Text(_) | Node::Raw(_) | Node::Comment(_) => {}
+            }
+        }
     }
 }
 

@@ -26,7 +26,7 @@ jobs:
         os: [ubuntu-latest, macos-15]
         toolchain: [stable, "1.85"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@master
         with:
           toolchain: ${{ matrix.toolchain }}
@@ -38,7 +38,7 @@ jobs:
     name: Lint (fmt, clippy)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -52,12 +52,12 @@ jobs:
     name: WebAssembly
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
-      - uses: jetli/wasm-pack-action@v0.4.0
+      - uses: taiki-e/install-action@wasm-pack
       - run: cargo build --features wasm --target wasm32-unknown-unknown
       - run: wasm-pack test --node -- --features wasm
 
@@ -65,13 +65,13 @@ jobs:
     name: NPM package
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           targets: wasm32-unknown-unknown
       - uses: Swatinem/rust-cache@v2
-      - uses: jetli/wasm-pack-action@v0.4.0
-      - uses: actions/setup-node@v4
+      - uses: taiki-e/install-action@wasm-pack
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
       # Builds all three targets and fails if the gzipped size exceeds the budget.
@@ -84,7 +84,7 @@ jobs:
     name: Verify (build, test, lint, catalog, smoke)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: rustfmt, clippy
@@ -95,14 +95,14 @@ jobs:
     name: Coverage
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - uses: dtolnay/rust-toolchain@stable
         with:
           components: llvm-tools-preview
       - uses: Swatinem/rust-cache@v2
       - uses: taiki-e/install-action@cargo-llvm-cov
       - run: cargo llvm-cov --all-features --lcov --output-path lcov.info
-      - uses: codecov/codecov-action@v4
+      - uses: codecov/codecov-action@v6
         with:
           files: lcov.info
           token: ${{ secrets.CODECOV_TOKEN }}

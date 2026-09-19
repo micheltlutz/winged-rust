@@ -141,15 +141,11 @@ Deliberate differences from the Swift API — and the reason for each — are li
 
 ## Known limitations
 
-**Rendering depth is bounded by the stack.** The renderer recurses once per nesting level,
-so 256 levels is the guaranteed depth — deeper than browsers themselves render. Around
-2,000 levels aborts the process, and a stack overflow is an abort rather than a catchable
-panic.
-
-This is only reachable if nesting depth can be influenced by untrusted input. If it can,
-bound the depth before building the tree or render on a thread with a larger stack. See
-[`SECURITY.md`](SECURITY.md#known-limitation-rendering-depth-is-bounded-by-the-stack) and
-[#33](https://github.com/micheltlutz/winged-rust/issues/33).
+**Pretty output is quadratic in nesting depth.** Every line carries one indent string per
+level above it, so a very deep tree renders a very large string. Rendering itself has no
+depth limit — the writer walks an explicit stack rather than recursing — but the size is
+worth knowing about when depth comes from untrusted input. See
+[`SECURITY.md`](SECURITY.md#rendering-depth-is-no-longer-bounded-by-the-stack).
 
 ## Development
 

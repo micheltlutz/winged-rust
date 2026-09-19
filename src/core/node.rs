@@ -83,9 +83,10 @@ impl Node {
 
     /// Whether this node renders to nothing.
     ///
-    /// The pretty-print writer uses this indirectly: it renders each child into a scratch
-    /// buffer and skips it if the result is empty, which is what stops an empty fragment —
-    /// the body of a false `if` — from leaving a blank line behind.
+    /// The pretty-print writer arrives at the same answer without calling this: it lets a
+    /// child write straight into the output and rolls the separator back if the child wrote
+    /// nothing, which is what stops an empty fragment — the body of a false `if` — from
+    /// leaving a blank line behind.
     #[must_use]
     pub fn is_empty(&self) -> bool {
         match self {
@@ -116,80 +117,169 @@ impl From<String> for Node {
 
 impl Render for Node {
     fn write_into(&self, out: &mut String, options: &RenderOptions, depth: usize) {
-        match self {
+        write_tree(
+            if options.pretty {
+                Step::Pretty(self, depth)
+            } else {
+                Step::Compact(self)
+            },
+            out,
+            options,
+        );
+    }
+}
+
+/// Renders an element without wrapping it in a [`Node`] first.
+///
+/// [`Render for Element`](Element) used to do `Node::Element(self.clone()).write_into(..)`,
+/// which deep-copied the whole subtree on every render — and cloning is itself recursive,
+/// so a deep tree aborted in `Clone` before the writer ever saw it.
+pub(crate) fn write_element_tree(
+    element: &Element,
+    out: &mut String,
+    options: &RenderOptions,
+    depth: usize,
+) {
+    write_tree(
+        if options.pretty {
+            Step::PrettyElement(element, depth)
+        } else {
+            Step::CompactElement(element)
+        },
+        out,
+        options,
+    );
+}
+
+/// One unit of work for the writer.
+///
+/// The writer used to recurse once per nesting level, which made tree depth a stack
+/// limit: roughly 2,000 levels aborted the process, and a stack overflow is an abort, not
+/// a panic anything can catch. Each variant here is what one of those recursive calls
+/// used to do, held on an explicit stack instead — so depth costs heap, bounded by a tree
+/// that is already in memory.
+enum Step<'a> {
+    /// Write this node on one line.
+    Compact(&'a Node),
+    /// Write this node indented to `depth`.
+    Pretty(&'a Node, usize),
+    /// Write this element on one line.
+    CompactElement(&'a Element),
+    /// Write this element indented to `depth`.
+    PrettyElement(&'a Element, usize),
+    /// `</tag>`.
+    Close(&'a str),
+    /// A newline, indentation to `depth`, then `</tag>`.
+    ClosePretty(&'a str, usize),
+    /// A child in pretty mode: writes the separating newline, renders the child, and then
+    /// takes both back out if the child rendered to nothing.
+    ///
+    /// `group_start` is `Some` inside a fragment, where the separator is only written once
+    /// something has already been emitted, and `None` inside an element, where every child
+    /// gets one.
+    PrettyChild {
+        node: &'a Node,
+        depth: usize,
+        group_start: Option<usize>,
+    },
+    /// Truncates back to `mark` when nothing was appended after `after`.
+    ///
+    /// This replaces rendering each child into a scratch buffer to test it for emptiness:
+    /// the child writes straight into the output and its separator is rolled back if it
+    /// wrote nothing, which is what still keeps an empty fragment — the body of a false
+    /// `@if` — from leaving a blank line behind.
+    DropIfEmpty { mark: usize, after: usize },
+}
+
+/// Drives the steps until the tree is written.
+fn write_tree(start: Step<'_>, out: &mut String, options: &RenderOptions) {
+    let mut stack = Vec::with_capacity(16);
+    stack.push(start);
+
+    while let Some(step) = stack.pop() {
+        match step {
             // Escaped text and verbatim markup write the same way; they differ only in
             // when the escaping happened, which is at construction.
-            Self::Text(s) | Self::Raw(s) => {
-                if options.pretty {
-                    options.write_indent(out, depth);
-                }
-                out.push_str(s);
+            Step::Compact(Node::Text(text) | Node::Raw(text)) => out.push_str(text),
+            Step::Compact(Node::Comment(content)) => write_comment(out, content),
+            Step::Compact(Node::Fragment(children)) => {
+                stack.extend(children.iter().rev().map(Step::Compact));
             }
-            Self::Comment(s) => {
-                if options.pretty {
-                    options.write_indent(out, depth);
-                }
-                out.push_str("<!-- ");
-                out.push_str(s);
-                out.push_str(" -->");
+            Step::Compact(Node::Element(element)) => stack.push(Step::CompactElement(element)),
+
+            Step::Pretty(Node::Text(text) | Node::Raw(text), depth) => {
+                options.write_indent(out, depth);
+                out.push_str(text);
             }
-            Self::Fragment(children) => write_fragment(children, out, options, depth),
-            Self::Element(element) => write_element(element, out, options, depth),
+            Step::Pretty(Node::Comment(content), depth) => {
+                options.write_indent(out, depth);
+                write_comment(out, content);
+            }
+            Step::Pretty(Node::Fragment(children), depth) => {
+                // The children sit at the *parent's* depth, joined by newlines, with empty
+                // ones skipped entirely.
+                let group_start = out.len();
+                stack.extend(children.iter().rev().map(|child| Step::PrettyChild {
+                    node: child,
+                    depth,
+                    group_start: Some(group_start),
+                }));
+            }
+            Step::Pretty(Node::Element(element), depth) => {
+                stack.push(Step::PrettyElement(element, depth));
+            }
+
+            Step::CompactElement(element) => {
+                push_compact_element(element, out, options, &mut stack);
+            }
+            Step::PrettyElement(element, depth) => {
+                push_pretty_element(element, depth, out, options, &mut stack);
+            }
+
+            Step::Close(tag) => {
+                out.push_str("</");
+                out.push_str(tag);
+                out.push('>');
+            }
+            Step::ClosePretty(tag, depth) => {
+                out.push('\n');
+                options.write_indent(out, depth);
+                out.push_str("</");
+                out.push_str(tag);
+                out.push('>');
+            }
+
+            Step::PrettyChild {
+                node,
+                depth,
+                group_start,
+            } => {
+                let mark = out.len();
+                let needs_separator = group_start.is_none_or(|start| out.len() > start);
+                if needs_separator {
+                    out.push('\n');
+                }
+                let after = out.len();
+                // Pushed first so it runs last: the child goes on top of it.
+                stack.push(Step::DropIfEmpty { mark, after });
+                stack.push(Step::Pretty(node, depth));
+            }
+            Step::DropIfEmpty { mark, after } => {
+                if out.len() == after {
+                    out.truncate(mark);
+                }
+            }
         }
     }
 }
 
-/// Renders a fragment's children with no wrapper.
-///
-/// In pretty mode the children sit at the *parent's* depth and are joined with newlines,
-/// with empty children skipped entirely.
-fn write_fragment(children: &[Node], out: &mut String, options: &RenderOptions, depth: usize) {
-    if !options.pretty {
-        for child in children {
-            child.write_into(out, options, depth);
-        }
-        return;
-    }
-
-    let mut first = true;
-    for child in children {
-        let mut rendered = String::new();
-        child.write_into(&mut rendered, options, depth);
-        if rendered.is_empty() {
-            continue;
-        }
-        if !first {
-            out.push('\n');
-        }
-        out.push_str(&rendered);
-        first = false;
-    }
-}
-
-fn write_element(element: &Element, out: &mut String, options: &RenderOptions, depth: usize) {
-    if options.pretty {
-        write_element_pretty(element, out, options, depth);
-    } else {
-        write_element_compact(element, out, options);
-    }
-}
-
-fn write_attributes(attributes: &[Attribute], out: &mut String) {
-    for attribute in attributes {
-        attribute.write_into(out);
-    }
-}
-
-/// Appends the closing token of a void element.
-fn write_void_suffix(out: &mut String, options: &RenderOptions) {
-    out.push_str(if options.xhtml_self_closing {
-        " />"
-    } else {
-        ">"
-    });
-}
-
-fn write_element_compact(element: &Element, out: &mut String, options: &RenderOptions) {
+/// Writes an element's opening token and queues everything that follows it.
+fn push_compact_element<'a>(
+    element: &'a Element,
+    out: &mut String,
+    options: &RenderOptions,
+    stack: &mut Vec<Step<'a>>,
+) {
     out.push('<');
     out.push_str(element.tag());
     write_attributes(element.attributes(), out);
@@ -205,25 +295,23 @@ fn write_element_compact(element: &Element, out: &mut String, options: &RenderOp
     if let Some(content) = element.content() {
         out.push_str(content);
     }
-    for child in element.children() {
-        child.write_into(out, options, 0);
-    }
-    out.push_str("</");
-    out.push_str(element.tag());
-    out.push('>');
+    stack.push(Step::Close(element.tag()));
+    stack.extend(element.children().iter().rev().map(Step::Compact));
 }
 
-fn write_element_pretty(
-    element: &Element,
+/// The same, indented, with the children queued one level deeper.
+fn push_pretty_element<'a>(
+    element: &'a Element,
+    depth: usize,
     out: &mut String,
     options: &RenderOptions,
-    depth: usize,
+    stack: &mut Vec<Step<'a>>,
 ) {
-    // `<pre>`, `<code>` and `<textarea>` render every whitespace character they contain,
-    // so indenting their children would change the text the browser displays.
+    // `<pre>`, `<code>` and `<textarea>` render every whitespace character they contain, so
+    // indenting their children would change what the browser shows.
     if is_whitespace_sensitive(element.tag()) {
         options.write_indent(out, depth);
-        write_element_compact(element, out, options);
+        stack.push(Step::CompactElement(element));
         return;
     }
 
@@ -255,22 +343,39 @@ fn write_element_pretty(
         out.push_str(content);
     }
 
-    for child in element.children() {
-        // Rendering into a scratch buffer keeps empty nodes — an empty fragment from a
-        // false `if` — from leaving a blank line behind.
-        let mut rendered = String::new();
-        child.write_into(&mut rendered, options, depth + 1);
-        if !rendered.is_empty() {
-            out.push('\n');
-            out.push_str(&rendered);
-        }
-    }
+    stack.push(Step::ClosePretty(element.tag(), depth));
+    stack.extend(
+        element
+            .children()
+            .iter()
+            .rev()
+            .map(|child| Step::PrettyChild {
+                node: child,
+                depth: depth + 1,
+                group_start: None,
+            }),
+    );
+}
 
-    out.push('\n');
-    options.write_indent(out, depth);
-    out.push_str("</");
-    out.push_str(element.tag());
-    out.push('>');
+fn write_comment(out: &mut String, content: &str) {
+    out.push_str("<!-- ");
+    out.push_str(content);
+    out.push_str(" -->");
+}
+
+fn write_attributes(attributes: &[Attribute], out: &mut String) {
+    for attribute in attributes {
+        attribute.write_into(out);
+    }
+}
+
+/// Appends the closing token of a void element.
+fn write_void_suffix(out: &mut String, options: &RenderOptions) {
+    out.push_str(if options.xhtml_self_closing {
+        " />"
+    } else {
+        ">"
+    });
 }
 
 #[cfg(test)]
