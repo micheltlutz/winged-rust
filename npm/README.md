@@ -3,6 +3,10 @@
 Fast, type-safe HTML generation in WebAssembly — a port of
 [Winged-Swift](https://github.com/micheltlutz/Winged-Swift).
 
+This is the WebAssembly build. The Rust crate is on
+[crates.io](https://crates.io/crates/winged-rust), documented at
+[docs.rs](https://docs.rs/winged-rust).
+
 ```bash
 npm install winged-rust
 ```
