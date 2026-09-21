@@ -1,5 +1,8 @@
 # winged-rust
 
+[![crates.io](https://img.shields.io/crates/v/winged-rust.svg?logo=rust)](https://crates.io/crates/winged-rust)
+[![docs.rs](https://img.shields.io/docsrs/winged-rust?logo=docsdotrs)](https://docs.rs/winged-rust)
+[![npm](https://img.shields.io/npm/v/winged-rust.svg?logo=npm)](https://www.npmjs.com/package/winged-rust)
 [![CI](https://github.com/micheltlutz/winged-rust/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/micheltlutz/winged-rust/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Rust 1.85+](https://img.shields.io/badge/rust-1.85%2B-dea584.svg)](https://www.rust-lang.org)
@@ -73,9 +76,18 @@ problem. `Node` is a value type, so bulk generation parallelises safely — that
 
 ## Install
 
+The crate is on [crates.io](https://crates.io/crates/winged-rust), its API documentation on
+[docs.rs](https://docs.rs/winged-rust), and the WebAssembly build on
+[npm](https://www.npmjs.com/package/winged-rust).
+
 ```toml
 [dependencies]
 winged-rust = "1.0"
+```
+
+```bash
+cargo add winged-rust      # Rust
+npm install winged-rust    # WebAssembly, see below
 ```
 
 Features:

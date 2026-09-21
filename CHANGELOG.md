@@ -7,6 +7,8 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [1.0.1] - 2026-09-21
+
 ### Added
 
 - **The Winged-Swift test suite is fully ported.** All 183 non-skipped cases across 23
