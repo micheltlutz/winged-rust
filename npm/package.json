@@ -1,6 +1,6 @@
 {
   "name": "winged-rust",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Fast, type-safe HTML generation in WebAssembly. A port of Winged-Swift.",
   "license": "MIT",
   "author": "Michel Anderson Lutz Teixeira <michel@micheltlutz.me>",
