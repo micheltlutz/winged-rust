@@ -33,6 +33,7 @@ pub struct Element {
     attributes: Vec<Attribute>,
     content: Option<String>,
     children: Vec<Node>,
+    self_closing: bool,
 }
 
 impl Element {
@@ -43,6 +44,7 @@ impl Element {
             attributes: Vec::new(),
             content: None,
             children: Vec::new(),
+            self_closing: false,
         }
     }
 
@@ -70,6 +72,22 @@ impl Element {
     #[must_use]
     pub fn children(&self) -> &[Node] {
         &self.children
+    }
+
+    /// Whether this element closes without an end tag, dropping content and children.
+    ///
+    /// Void tags do this on their own. [`Self::self_closing`] opts any other tag into the
+    /// same shape.
+    ///
+    /// # Examples
+    /// ```
+    /// use winged_rust::prelude::*;
+    /// assert!(!div().is_self_closing());
+    /// assert!(div().self_closing(true).is_self_closing());
+    /// ```
+    #[must_use]
+    pub fn is_self_closing(&self) -> bool {
+        self.self_closing
     }
 
     // MARK: - Content
@@ -131,6 +149,53 @@ impl Element {
     #[must_use]
     pub fn bool_attr(self, key: impl Into<String>) -> Self {
         self.add_attribute(Attribute::boolean(key))
+    }
+
+    /// Replaces `key` with a URL that is written as given, even if it is a script URL.
+    ///
+    /// The value is still attribute-escaped. Use this only for a URL you wrote yourself.
+    ///
+    /// # Examples
+    /// ```
+    /// use winged_rust::prelude::*;
+    /// assert_eq!(
+    ///     a().attr("href", "javascript:x")
+    ///         .trusted_url("href", "javascript:print()")
+    ///         .render(),
+    ///     "<a href=\"javascript:print()\"></a>"
+    /// );
+    /// ```
+    #[must_use]
+    pub fn trusted_url(mut self, key: impl Into<String>, value: impl AsRef<str>) -> Self {
+        let attribute = Attribute::trusted_url(key, value);
+        let name = attribute.key().to_string();
+        self.attributes.retain(|existing| existing.key() != name);
+        self.attributes.push(attribute);
+        self
+    }
+
+    /// Closes this element without an end tag, and does not render its content or children.
+    ///
+    /// `true` emits `>` or, when [`RenderOptions::xhtml_self_closing`] is set, ` />`, even
+    /// when the tag is not void. The default is `false`, so existing markup is unchanged.
+    /// Attributes are still written, which is what keeps the URL policy in front of a tag
+    /// that would otherwise have been emitted as raw markup.
+    ///
+    /// # Examples
+    /// ```
+    /// use winged_rust::core::RenderOptions;
+    /// use winged_rust::prelude::*;
+    /// let field = div().attr("id", "x").self_closing(true).child(span().text("no"));
+    /// assert_eq!(field.render(), "<div id=\"x\">");
+    /// assert_eq!(
+    ///     field.render_with(&RenderOptions::compact().with_xhtml_self_closing(true)),
+    ///     "<div id=\"x\" />"
+    /// );
+    /// ```
+    #[must_use]
+    pub fn self_closing(mut self, yes: bool) -> Self {
+        self.self_closing = yes;
+        self
     }
 
     /// Appends `data-{key}="{value}"`.
@@ -264,10 +329,37 @@ impl Drop for Element {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::core::RenderOptions;
     use crate::elements::{
         a, body, button, div, footer, head, header, html_tag, img, input_named, li, main_tag, meta,
         nav, ol, p, script, span, stylesheet, table, td, th, title, tr, ul,
     };
+
+    /// Ports `ThreeZeroTests.trustedURLsRenderAsGiven` on the element builder.
+    #[test]
+    fn trusted_url_replaces_a_blocked_value() {
+        assert_eq!(
+            a().attr("href", "javascript:x")
+                .trusted_url("href", "javascript:print()")
+                .render(),
+            r#"<a href="javascript:print()"></a>"#
+        );
+    }
+
+    #[test]
+    fn a_non_void_tag_marked_self_closing_drops_its_children() {
+        let tag = div()
+            .attr("id", "x")
+            .self_closing(true)
+            .child(span().text("no"));
+        assert_eq!(tag.render(), r#"<div id="x">"#);
+        assert_eq!(
+            tag.render_with(&RenderOptions::compact().with_xhtml_self_closing(true)),
+            r#"<div id="x" />"#
+        );
+        assert_eq!(tag.render_pretty(), r#"<div id="x">"#);
+        assert!(!div().is_self_closing());
+    }
 
     /// Ports `CSSHelpersTests.testAddMultipleClasses`.
     #[test]

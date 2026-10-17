@@ -57,6 +57,9 @@ difference that shows up somewhere those four files do not reach.
 | `addAttribute(_:)` | `add_attribute` |
 | `addChild(_:)` | `child` |
 | `setContent(_:escape:)` | `text` / `raw_text` |
+| `Attribute.trustedURL(key:value:)` (3.0.1) | `Attribute::trusted_url` | still attribute-escaped |
+| `trustedURL(_:_:)` (3.0.1) | `Element::trusted_url` | replaces the previous value |
+| `Document.write(toFile:)` (3.0.1) | `Document::render_to` | same bytes as `render_with` |
 
 ### Renamed elements
 
@@ -114,7 +117,9 @@ Rust version returns an error for an empty path, a filesystem root, or a path co
 ### 6. Writes are atomic
 
 `write_file` writes to a temporary file in the destination directory and renames it, so a
-concurrent reader never sees a half-written page. Swift writes in place.
+concurrent reader never sees a half-written page. Swift writes in place. `generate` fills
+that temporary file through `Document::render_to`, which matches `render_with` byte for
+byte and renders each body section on its own.
 
 ### 7. `generate_multiple` reports every failure
 
@@ -128,7 +133,23 @@ useless.
 and slated for removal in 3.0. It is not ported. Use
 `RenderOptions::compact().with_xhtml_self_closing(true)`.
 
-### 9. Rust has no default arguments
+### 9. URL attributes are checked when they are written
+
+Winged-Swift 2.0 writes `href="javascript:…"` as given. 3.0.1 neutralises script URLs at
+write time, and this crate follows 3.0.1: `href`, `src`, `action`, `formaction`, `poster`,
+`cite`, `background`, `xlink:href` and `data` become `#` when the stored value is a
+`javascript:`, `vbscript:` or `data:text/html` URL. `Attribute::raw` does not escape, but
+it does not skip the check. `trusted_url` does.
+
+`escape_attribute` still does not escape `<` or `>`. The fixtures and the table above fix
+that escaper; widening it would change markup that is not a URL.
+
+### 10. A non-void tag can close itself
+
+`Element::self_closing(true)` emits `>` or ` />` and drops children, including for a tag
+that is not in the void set. The default is `false`. Void tags are unchanged.
+
+### 11. Rust has no default arguments
 
 Swift initializers like `Button(type: String? = "button", …)` become either an explicit
 constructor (`button_typed("submit")`) or a plain `attr` call. Nothing silently defaults.

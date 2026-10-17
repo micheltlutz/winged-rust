@@ -62,9 +62,21 @@ impl WElement {
     }
 
     /// Appends an attribute, escaping the value.
+    ///
+    /// URL attributes go through the same policy as [`Element::attr`]: a script URL renders
+    /// as `#`.
     #[must_use]
     pub fn attr(self, key: &str, value: &str) -> Self {
         Self(self.0.attr(key, value))
+    }
+
+    /// Replaces `key` with a URL written as given, even if it is a script URL.
+    ///
+    /// The value is still attribute-escaped. Use this only for a URL the page author wrote.
+    #[wasm_bindgen(js_name = trustedUrl)]
+    #[must_use]
+    pub fn trusted_url(self, key: &str, value: &str) -> Self {
+        Self(self.0.trusted_url(key, value))
     }
 
     /// Appends a boolean attribute, which renders as a bare key.
@@ -240,4 +252,23 @@ pub fn escape_text(input: &str) -> String {
 #[must_use]
 pub fn version() -> String {
     env!("CARGO_PKG_VERSION").to_string()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn trusted_url_skips_the_script_url_check() {
+        assert_eq!(
+            WElement::new("a")
+                .trusted_url("href", "javascript:print()")
+                .render(),
+            "<a href=\"javascript:print()\"></a>"
+        );
+        assert_eq!(
+            WElement::new("a").attr("href", "javascript:x").render(),
+            "<a href=\"#\"></a>"
+        );
+    }
 }

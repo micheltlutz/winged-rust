@@ -34,11 +34,16 @@ run "cargo build --no-default-features" cargo build --no-default-features
 run "wasm32 target" cargo build --features wasm --target wasm32-unknown-unknown
 
 step "2/7  Test"
-run "cargo test --all-features" cargo test --all-features
+run "cargo test --all-features" cargo test --locked --all-features
 
 step "3/7  Lint"
 run "cargo fmt --check" cargo fmt --all --check
-run "cargo clippy" cargo clippy --all-targets --all-features -- -D warnings
+run "cargo clippy" cargo clippy --locked --all-targets --all-features -- -D warnings
+if command -v cargo-deny >/dev/null 2>&1; then
+  run "cargo deny" cargo deny check advisories bans licenses sources
+else
+  fail "cargo-deny is not installed (cargo install cargo-deny, or the CI install-action)"
+fi
 
 step "4/7  Tag catalog freshness"
 if [ -x scripts/generate-tag-catalog.sh ]; then

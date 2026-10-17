@@ -6,7 +6,7 @@
 //! there.
 
 use std::fs;
-use std::io;
+use std::io::{self, Write};
 use std::path::{Component, Path, PathBuf};
 
 use crate::core::{Node, Render, RenderOptions};
@@ -45,6 +45,9 @@ impl StaticSiteGenerator {
 
     /// Renders a document to `path`, relative to the output directory.
     ///
+    /// The page is written with [`Document::render_to`], section by section, into a
+    /// temporary file that is then renamed. The bytes match [`Document::render_with`].
+    ///
     /// # Errors
     /// Returns an error if the path escapes the output directory, or if the write fails.
     pub fn generate(
@@ -53,7 +56,11 @@ impl StaticSiteGenerator {
         path: &str,
         options: &RenderOptions,
     ) -> io::Result<()> {
-        self.write_file(&document.render_with(options), path)
+        self.write_atomic(path, |file| {
+            let mut buffered = io::BufWriter::new(file);
+            document.render_to(&mut buffered, options)?;
+            buffered.flush()
+        })
     }
 
     /// Renders several documents.
@@ -150,14 +157,33 @@ impl StaticSiteGenerator {
     /// # Errors
     /// Returns an error if the path escapes the output directory or the write fails.
     pub fn write_file(&self, content: &str, path: &str) -> io::Result<()> {
+        self.write_atomic(path, |file| file.write_all(content.as_bytes()))
+    }
+
+    /// Writes through a temporary file in the destination directory, then renames.
+    ///
+    /// The closure receives the open temporary file. On any error the temporary file is
+    /// removed, so a reader never observes a half-written page under the final name.
+    fn write_atomic(
+        &self,
+        path: &str,
+        write_contents: impl FnOnce(&mut fs::File) -> io::Result<()>,
+    ) -> io::Result<()> {
         let destination = self.resolve(path)?;
         if let Some(parent) = destination.parent() {
             fs::create_dir_all(parent)?;
         }
 
         let temporary = destination.with_extension("winged-tmp");
-        fs::write(&temporary, content)?;
-        fs::rename(&temporary, &destination)?;
+        let mut file = fs::File::create(&temporary)?;
+        if let Err(error) = write_contents(&mut file) {
+            let _ = fs::remove_file(&temporary);
+            return Err(error);
+        }
+        if let Err(error) = fs::rename(&temporary, &destination) {
+            let _ = fs::remove_file(&temporary);
+            return Err(error);
+        }
         Ok(())
     }
 
@@ -253,6 +279,27 @@ mod tests {
         let written = fs::read_to_string(dir.0.join("index.html")).expect("readable");
         assert!(written.starts_with("<!DOCTYPE html>"));
         assert!(written.contains("<h1>Home</h1>"));
+    }
+
+    /// Ports `ThreeZeroTests.generatorStreamsDocuments` and
+    /// `ThreeZeroTests.replacesAnExistingFileAndReportsFailures`.
+    #[test]
+    fn generate_replaces_a_file_with_the_rendered_bytes() {
+        let dir = TempDir::new("stream");
+        let site = StaticSiteGenerator::new(&dir.0);
+        let destination = dir.0.join("index.html");
+        fs::write(&destination, "old").expect("seed");
+
+        let page = page("Home");
+        site.generate(&page, "index.html", &RenderOptions::pretty())
+            .expect("written");
+
+        let written = fs::read(destination).expect("readable");
+        assert_eq!(
+            written,
+            page.render_with(&RenderOptions::pretty()).into_bytes()
+        );
+        assert!(!dir.0.join("index.winged-tmp").exists());
     }
 
     /// Ports `StaticSiteGeneratorTests.generateCreatesNestedDirectories`.

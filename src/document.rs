@@ -2,7 +2,9 @@
 //!
 //! Ports `Winged-Swift/Sources/WingedSwift/core/Document.swift`.
 
-use crate::core::{Element, Node, Render, RenderOptions};
+use std::io::{self, Write};
+
+use crate::core::{Attribute, Element, Node, Render, RenderOptions};
 use crate::elements::{body, head, html_tag};
 
 /// A complete HTML document: a language, a `<head>` and a `<body>`.
@@ -105,12 +107,123 @@ impl Document {
     pub fn render_compact(&self) -> String {
         self.render_with(&RenderOptions::compact())
     }
+
+    /// Writes the same bytes as [`render_with`](Self::render_with) to `sink`.
+    ///
+    /// When `<body>` is only a list of children, each child is rendered with
+    /// [`Render::write_into`] into its own buffer and then written out, so memory stays
+    /// bounded by the largest section rather than the whole page. A body with text
+    /// content, no children, or a self-closing flag is written in one piece — still the
+    /// same bytes.
+    ///
+    /// # Errors
+    /// Returns an error if `sink` does.
+    ///
+    /// # Examples
+    /// ```
+    /// use winged_rust::prelude::*;
+    /// use winged_rust::{Document, RenderOptions};
+    /// let page = Document::new(Some("en")).body_children([h1().text("Hi")]);
+    /// let mut buf = Vec::new();
+    /// page.render_to(&mut buf, &RenderOptions::compact())?;
+    /// assert_eq!(buf, page.render_compact().into_bytes());
+    /// # Ok::<(), std::io::Error>(())
+    /// ```
+    pub fn render_to(&self, mut sink: impl Write, options: &RenderOptions) -> io::Result<()> {
+        if !streams_by_section(&self.body) {
+            return sink.write_all(self.render_with(options).as_bytes());
+        }
+        sink.write_all(self.html_open().as_bytes())?;
+        if options.pretty {
+            self.write_pretty_sections(&mut sink, options)
+        } else {
+            self.write_compact_sections(&mut sink, options)
+        }
+    }
+
+    fn html_open(&self) -> String {
+        let mut open = String::from("<!DOCTYPE html>\n<html");
+        if let Some(lang) = &self.lang {
+            Attribute::new("lang", lang).write_into(&mut open);
+        }
+        open.push('>');
+        open
+    }
+
+    fn write_pretty_sections(
+        &self,
+        sink: &mut impl Write,
+        options: &RenderOptions,
+    ) -> io::Result<()> {
+        let mut head_markup = String::from("\n");
+        self.head.write_into(&mut head_markup, options, 1);
+        sink.write_all(head_markup.as_bytes())?;
+
+        let mut body_open = String::from("\n");
+        options.write_indent(&mut body_open, 1);
+        write_open_tag(&self.body, &mut body_open);
+        sink.write_all(body_open.as_bytes())?;
+
+        for child in self.body.children() {
+            let mut rendered = String::new();
+            child.write_into(&mut rendered, options, 2);
+            if !rendered.is_empty() {
+                sink.write_all(b"\n")?;
+                sink.write_all(rendered.as_bytes())?;
+            }
+        }
+
+        let mut close = String::from("\n");
+        options.write_indent(&mut close, 1);
+        close.push_str("</body>\n</html>");
+        sink.write_all(close.as_bytes())
+    }
+
+    fn write_compact_sections(
+        &self,
+        sink: &mut impl Write,
+        options: &RenderOptions,
+    ) -> io::Result<()> {
+        let mut head_markup = String::new();
+        self.head.write_into(&mut head_markup, options, 0);
+        sink.write_all(head_markup.as_bytes())?;
+
+        let mut body_open = String::new();
+        write_open_tag(&self.body, &mut body_open);
+        sink.write_all(body_open.as_bytes())?;
+
+        for child in self.body.children() {
+            let mut rendered = String::new();
+            child.write_into(&mut rendered, options, 0);
+            sink.write_all(rendered.as_bytes())?;
+        }
+        sink.write_all(b"</body></html>")
+    }
+}
+
+/// A body made of sections can be written one child at a time. Anything else goes through
+/// [`Document::render_with`] so the bytes cannot drift.
+fn streams_by_section(body: &Element) -> bool {
+    body.tag() == "body"
+        && body.content().is_none()
+        && !body.children().is_empty()
+        && !body.is_self_closing()
+}
+
+fn write_open_tag(element: &Element, out: &mut String) {
+    out.push('<');
+    out.push_str(element.tag());
+    for attribute in element.attributes() {
+        attribute.write_into(out);
+    }
+    out.push('>');
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::elements::{h1, title};
+    use crate::core::Node;
+    use crate::elements::{body, h1, h2, head, img, meta, p, section, title};
 
     /// Ports `DocumentTests.rendersDoctypeAndLanguage`.
     #[test]
@@ -189,5 +302,55 @@ mod tests {
         let rendered = page.render_compact();
         assert!(!rendered.contains("banner"));
         assert!(rendered.contains("<p>line 1</p><p>line 2</p>"));
+    }
+
+    /// Ports `ThreeZeroTests.fileMatchesRender` and
+    /// `ThreeZeroTests.bodiesThatCannotStreamStillMatch`.
+    #[test]
+    fn render_to_matches_render_with() {
+        let options = [
+            RenderOptions::pretty(),
+            RenderOptions::compact(),
+            RenderOptions::pretty()
+                .with_indent("\t")
+                .with_xhtml_self_closing(true),
+        ];
+        let documents = [
+            streaming_page(3, false),
+            streaming_page(400, false),
+            streaming_page(2, true),
+            Document::with_parts(None, head(), body()),
+            Document::with_parts(Some("en"), head(), body().raw_text("<raw>")),
+        ];
+        for page in &documents {
+            for options in &options {
+                let mut written = Vec::new();
+                page.render_to(&mut written, options).expect("write");
+                assert_eq!(written, page.render_with(options).into_bytes());
+            }
+        }
+    }
+
+    fn streaming_page(sections: usize, empty: bool) -> Document {
+        let mut nodes = Vec::new();
+        if empty {
+            nodes.push(Node::fragment([]));
+        }
+        for index in 0..sections {
+            nodes.push(
+                section()
+                    .add_class("s")
+                    .child(h2().text(format!("Section {index}")))
+                    .child(p().text("text & more ".repeat(50)))
+                    .child(img().attr("src", format!("/{index}.png")).attr("alt", ""))
+                    .into(),
+            );
+        }
+        if empty {
+            nodes.push(Node::fragment([]));
+        }
+        Document::new(Some("en"))
+            .head_children([title().text("Streaming"), meta().attr("charset", "UTF-8")])
+            .body_children(nodes)
     }
 }
