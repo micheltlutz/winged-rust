@@ -7,6 +7,31 @@ project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+### Added
+
+- **URL policy, checked when the tree is written.** `href`, `src`, `action`, `formaction`,
+  `poster`, `cite`, `background`, `xlink:href` and `data` render as `#` when the value is a
+  `javascript:`, `vbscript:` or `data:text/html` URL. The check decodes character references
+  once, so `Attribute::raw("href", "javascript&#58;alert(1)")` is blocked, while a value
+  passed through `Attribute::new` keeps its escaped `&amp;`. `Attribute::trusted_url`,
+  `Element::trusted_url` and `WElement.trustedUrl` opt out. An attribute name that contains
+  a space, quote, `=`, `<`, `>`, `/` or a control character is not emitted.
+- `Element::self_closing(true)` closes a non-void tag with `>` or ` />` and drops its
+  children, so a self-closing tag does not have to be built as `Node::Raw` (which would
+  skip the URL policy).
+- `Document::render_to` writes the same bytes as `render_with`, one body section at a time.
+  `StaticSiteGenerator::generate` uses it, into the existing temporary file.
+- `overflow-checks` in the release profile, `cargo deny`, and a libFuzzer script
+  (`scripts/fuzz.sh`) that is outside the pull-request gate. `unwrap` and `expect` are
+  denied in library code.
+
+### Changed
+
+- The release workflow verifies in a job with no registry token, then publishes from a
+  fresh build with `cargo publish --locked --no-verify` via crates.io Trusted Publishing.
+  Registering the `release` environment on crates.io and retiring `CARGO_REGISTRY_TOKEN`
+  is a manual step.
+
 ## [1.0.1] - 2026-09-21
 
 ### Added

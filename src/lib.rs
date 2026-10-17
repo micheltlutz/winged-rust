@@ -23,6 +23,12 @@
 //! is rendered, so nothing is escaped twice and nothing is missed. [`Node::Raw`] is the
 //! documented way to inject markup you already trust.
 //!
+//! URL attributes are checked **when the tree is written**. `href`, `src`, `action`,
+//! `formaction`, `poster`, `cite`, `background`, `xlink:href` and `data` render as `#`
+//! when the value is a `javascript:`, `vbscript:` or `data:text/html` URL, including a
+//! value stored with [`Attribute::raw`](core::Attribute::raw). [`Element::trusted_url`]
+//! opts out for a URL you wrote yourself. See `SECURITY.md`.
+//!
 //! ```
 //! use winged_rust::prelude::*;
 //! assert_eq!(p().text("<script>").render(), "<p>&lt;script&gt;</p>");

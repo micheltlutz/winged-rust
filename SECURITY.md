@@ -26,7 +26,8 @@ These are vulnerabilities:
 
 - Any input to `text()`, `Attribute::new`, `Element::attr`, or the escaping functions that
   survives into the output as executable markup or as an attribute that breaks out of its
-  quoting.
+  quoting. An attribute name containing a space, quote, `=`, `<`, `>`, `/` or a control
+  character is omitted rather than written.
 - A class, id, style or `data-*` value that can inject an additional attribute.
 - `Node::comment` content that can terminate the comment early.
 - `StaticSiteGenerator` writing outside its output directory, or `clean()` deleting outside
@@ -63,11 +64,26 @@ These are **not** vulnerabilities, because they are documented behaviour:
 - `raw_text()` and `Node::Raw` not escaping their input. That is their entire purpose; they
   are named and documented so that an audit can grep for them.
 - `<script>` and `<style>` content not being escaped by default, matching Winged-Swift.
-- `Attribute::raw` not escaping. It exists for library-controlled keys.
-- The library not validating URLs. `link_to("javascript:alert(1)")` renders what you asked
-  for. URL policy is on the roadmap, not in the current guarantee.
+- `Attribute::raw` not escaping. It exists for library-controlled keys. It does **not**
+  skip the URL check below: a raw `href="javascript&#58;..."` is still rendered as `href="#"`.
 - Rendering a tree deeper than the documented 256 levels. See the limitation above — it is
   a known bound, not an undisclosed one.
+
+### URL attributes are checked at write time
+
+`href`, `src`, `action`, `formaction`, `poster`, `cite`, `background`, `xlink:href` and
+`data` are rendered as `#` when the value, after one character-reference decode and after
+dropping characters at or below U+0020, starts with `javascript:`, `vbscript:` or
+`data:text/html` (ASCII case-insensitive). `data:image/...` is left alone, and so is a
+non-URL attribute such as `title`. Comparison is on the stored value, so a value that went
+through `Attribute::new` has already turned `&` into `&amp;` and is not decoded back into a
+scheme.
+
+`Attribute::trusted_url` and `Element::trusted_url` (and `trustedUrl` on the WASM element)
+skip that check. The value is still attribute-escaped. Use them only for a URL you wrote.
+
+The design, and the work that is deliberately not in this crate, is in
+[docs/plans/2026-10-17-seguranca-e-performance.md](docs/plans/2026-10-17-seguranca-e-performance.md).
 
 ## For users
 

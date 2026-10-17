@@ -4,16 +4,13 @@ on:
   push:
     tags: ["v*.*.*"]
 
+# The verify job has no token permission. Publish is the only job that can mint one.
 permissions:
-  contents: write
-  # `npm publish --provenance` mints an OIDC token through Sigstore, and GitHub only
-  # issues one when the job is allowed to. Without this, the npm step fails after the
-  # crate has already gone to crates.io — the worst place to discover it.
-  id-token: write
+  contents: read
 
 jobs:
-  release:
-    name: Publish
+  verify:
+    name: Verify
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -29,11 +26,36 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version: 22
-          registry-url: https://registry.npmjs.org
+      - uses: taiki-e/install-action@cargo-deny
 
-      # Nothing ships that has not passed the same gate a pull request passes.
       - name: Verify
         run: ./scripts/verify.sh
+
+  release:
+    name: Publish
+    needs: verify
+    runs-on: ubuntu-latest
+    # Trusted Publishing: register this environment on crates.io, then retire
+    # CARGO_REGISTRY_TOKEN. The auth action below replaces the stored token.
+    environment: release
+    permissions:
+      contents: write
+      # crates.io trusted publishing and `npm publish --provenance` both mint an OIDC token.
+      id-token: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+          components: rustfmt, clippy
+      - uses: taiki-e/install-action@wasm-pack
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
 
       - name: Resolve the version
         id: version
@@ -84,8 +106,12 @@ jobs:
       # the one thing in this pipeline that cannot be undone, so the steps after it have
       # to remain reachable.
       #
-      # The token goes through the environment, not `--token`, which cargo deprecated and
-      # which puts the secret in the process argument list.
+      # Trusted Publishing mints a short-lived token for this workflow. Register the
+      # `release` environment on crates.io and retire CARGO_REGISTRY_TOKEN; this job
+      # does not read that secret.
+      - uses: rust-lang/crates-io-auth-action@v1
+        id: auth
+
       - name: Publish to crates.io
         run: |
           VERSION="${{ steps.version.outputs.version }}"
@@ -93,10 +119,10 @@ jobs:
                "https://crates.io/api/v1/crates/winged-rust/$VERSION"; then
             echo "::notice::winged-rust $VERSION is already on crates.io — skipping"
           else
-            cargo publish
+            cargo publish --locked --no-verify
           fi
         env:
-          CARGO_REGISTRY_TOKEN: ${{ secrets.CARGO_REGISTRY_TOKEN }}
+          CARGO_REGISTRY_TOKEN: ${{ steps.auth.outputs.token }}
 
       - name: Publish to npm
         run: |

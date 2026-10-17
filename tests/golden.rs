@@ -1,4 +1,5 @@
 //! Byte-for-byte parity with Winged-Swift.
+#![allow(clippy::expect_used, clippy::unwrap_used)]
 //!
 //! The four files in `tests/fixtures/` are copied verbatim out of
 //! `Winged-Swift/Tests/WingedSwiftTests/Fixtures/`. They are the strongest correctness gate

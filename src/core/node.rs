@@ -285,8 +285,10 @@ fn push_compact_element<'a>(
     write_attributes(element.attributes(), out);
 
     // A void element takes no content and no children — both are silently dropped, which
-    // is what Winged-Swift does.
-    if is_void(element.tag()) {
+    // is what Winged-Swift does. `Element::self_closing` opts a non-void tag into the same
+    // shape, so a caller can emit `<input />` without building a `Node::Raw` that would
+    // skip the URL policy in `Attribute::write_into`.
+    if is_void(element.tag()) || element.is_self_closing() {
         write_void_suffix(out, options);
         return;
     }
@@ -320,7 +322,7 @@ fn push_pretty_element<'a>(
     out.push_str(element.tag());
     write_attributes(element.attributes(), out);
 
-    if is_void(element.tag()) {
+    if is_void(element.tag()) || element.is_self_closing() {
         write_void_suffix(out, options);
         return;
     }

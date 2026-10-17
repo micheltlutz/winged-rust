@@ -3,6 +3,7 @@
 //! Ports `Winged-Swift/Sources/WingedSwift/core/Attribute.swift`.
 
 use crate::core::escape::write_escaped_attribute;
+use crate::core::url_policy;
 
 /// A single HTML attribute.
 ///
@@ -20,6 +21,8 @@ pub struct Attribute {
     key: String,
     value: String,
     is_boolean: bool,
+    /// When true, a URL attribute is written as stored. The URL policy reads this flag.
+    is_trusted_url: bool,
 }
 
 impl Attribute {
@@ -32,7 +35,27 @@ impl Attribute {
             key: key.into(),
             value: escaped,
             is_boolean: false,
+            is_trusted_url: false,
         }
+    }
+
+    /// A URL attribute rendered as given, even when the value is a script URL.
+    ///
+    /// `href`, `src`, `action` and the other URL attributes render as `#` when the value
+    /// would run script. Use this only for a URL you wrote yourself. The value is still
+    /// attribute-escaped.
+    ///
+    /// # Examples
+    /// ```
+    /// use winged_rust::prelude::*;
+    /// let link = a().add_attribute(Attribute::trusted_url("href", "javascript:print()"));
+    /// assert_eq!(link.render(), "<a href=\"javascript:print()\"></a>");
+    /// ```
+    #[must_use]
+    pub fn trusted_url(key: impl Into<String>, value: impl AsRef<str>) -> Self {
+        let mut attribute = Self::new(key, value);
+        attribute.is_trusted_url = true;
+        attribute
     }
 
     /// Creates an attribute **without** escaping the value.
@@ -45,6 +68,7 @@ impl Attribute {
             key: key.into(),
             value: value.into(),
             is_boolean: false,
+            is_trusted_url: false,
         }
     }
 
@@ -56,6 +80,7 @@ impl Attribute {
             key: key.into(),
             value: String::new(),
             is_boolean: true,
+            is_trusted_url: false,
         }
     }
 
@@ -78,15 +103,37 @@ impl Attribute {
     }
 
     /// Appends ` key="value"`, or ` key` for a boolean attribute, to a buffer.
+    ///
+    /// A name that could break out of the attribute — space, quotes, `=`, `<`, `>`, `/`
+    /// or a control character, and the empty name — is omitted. URL attributes are then
+    /// checked by [`url_policy`](crate::core::url_policy); a blocked value is written as `#`. The check sees the
+    /// stored value, so [`Self::raw`] is covered and [`Self::trusted_url`] is not.
     pub(crate) fn write_into(&self, out: &mut String) {
+        if !is_safe_attribute_name(&self.key) {
+            return;
+        }
         out.push(' ');
         out.push_str(&self.key);
-        if !self.is_boolean {
-            out.push_str("=\"");
-            out.push_str(&self.value);
-            out.push('"');
+        if self.is_boolean {
+            return;
         }
+        out.push_str("=\"");
+        if self.is_trusted_url || !url_policy::is_blocked(&self.key, &self.value) {
+            out.push_str(&self.value);
+        } else {
+            out.push_str(url_policy::REPLACEMENT);
+        }
+        out.push('"');
     }
+}
+
+/// An attribute name is emitted only when it cannot close the quotes or start a new
+/// attribute. An empty name is omitted for the same reason: ` ="..."` is not a name.
+fn is_safe_attribute_name(key: &str) -> bool {
+    !key.is_empty()
+        && !key.chars().any(|scalar| {
+            scalar.is_control() || matches!(scalar, ' ' | '"' | '\'' | '=' | '<' | '>' | '/')
+        })
 }
 
 impl std::fmt::Display for Attribute {
